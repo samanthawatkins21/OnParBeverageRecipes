@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cocktail Cost Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Batch cocktail costing</p>
+          <h1>Cocktail Recipe Dashboard</h1>
+        </div>
+        <div class="top-actions" aria-label="Dashboard controls">
+          <button class="tab-button is-active" data-tab="recipes" type="button">Recipes</button>
+          <button class="tab-button" data-tab="pricing" type="button">Pricing</button>
+          <button class="tab-button" data-tab="add" type="button">Add Recipe</button>
+          <button class="tab-button" data-tab="ingredients" type="button">Ingredients</button>
+          <button class="tab-button" data-tab="old" type="button">Old Recipes</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="panel is-active" id="recipes-panel" aria-labelledby="recipes-tab">
+          <div class="toolbar">
+            <label class="search-field">
+              <span>Search recipes or ingredients</span>
+              <input id="recipe-search" type="search" placeholder="Search cocktails, liquor, juice...">
+            </label>
+            <label class="select-field">
+              <span>Spirit</span>
+              <select id="category-filter">
+                <option value="all">All spirits</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="stats-grid" id="stats-grid"></div>
+          <div class="recipe-grid" id="recipe-grid"></div>
+        </section>
+
+        <section class="panel" id="pricing-panel" aria-labelledby="pricing-tab">
+          <div class="toolbar">
+            <label class="search-field">
+              <span>Find recipe</span>
+              <input id="pricing-search" type="search" placeholder="Search charge pricing...">
+            </label>
+            <button class="ghost-button" id="clear-charges" type="button">Clear charge overrides</button>
+          </div>
+
+          <div class="pricing-layout">
+            <aside class="pricing-summary" id="pricing-summary"></aside>
+            <div class="pricing-table-wrap">
+              <table class="pricing-table">
+                <thead>
+                  <tr>
+                    <th>Recipe</th>
+                    <th>Cost / oz</th>
+                    <th>Charge / oz</th>
+                    <th>Profit / oz</th>
+                    <th>Margin</th>
+                    <th>Oz for 1.5 alcohol</th>
+                    <th>Charge / pour</th>
+                  </tr>
+                </thead>
+                <tbody id="pricing-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="add-panel" aria-labelledby="add-tab">
+          <form class="recipe-form" id="recipe-form">
+            <div class="form-header">
+              <div>
+                <p class="eyebrow">Recipe builder</p>
+                <h2>Add a new cocktail</h2>
+              </div>
+              <button class="primary-button" type="submit">Add recipe</button>
+            </div>
+
+            <div class="form-grid">
+              <label>
+                <span>Recipe name</span>
+                <input id="new-recipe-title" type="text" required placeholder="Example: Spicy Pineapple Margarita">
+              </label>
+              <label>
+                <span>Batch size</span>
+                <input id="new-recipe-batch" type="text" placeholder="Example: 12 gallons">
+              </label>
+              <label>
+                <span>Spirit</span>
+                <select id="new-recipe-category">
+                  <option>Vodka</option>
+                  <option>Tequila</option>
+                  <option>Whiskey</option>
+                  <option>Gin</option>
+                  <option>Rum</option>
+                  <option>Other</option>
+                </select>
+              </label>
+              <label>
+                <span>Charge per oz</span>
+                <input id="new-recipe-charge" type="text" inputmode="decimal" placeholder="2.49">
+              </label>
+            </div>
+
+            <div class="builder-panel">
+              <div class="builder-panel__header">
+                <h3>Ingredients</h3>
+                <button class="ghost-button" id="add-ingredient-row" type="button">Add ingredient</button>
+              </div>
+              <p class="formula-note">Put the liquor as the first ingredient. The dashboard uses that first row to calculate how many ounces of cocktail equal 1.5 oz of alcohol.</p>
+              <div class="new-ingredient-table-wrap">
+                <table class="new-ingredient-table">
+                  <thead>
+                    <tr>
+                      <th>Ingredient</th>
+                      <th>$ in recipe</th>
+                      <th>Oz in recipe</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="new-ingredient-rows"></tbody>
+                </table>
+              </div>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel" id="ingredients-panel" aria-labelledby="ingredients-tab">
+          <div class="toolbar">
+            <label class="search-field">
+              <span>Find ingredient</span>
+              <input id="ingredient-search" type="search" placeholder="Search ingredient catalog...">
+            </label>
+            <button class="ghost-button" id="clear-prices" type="button">Clear bottle overrides</button>
+          </div>
+
+          <div class="ingredient-layout">
+            <aside class="ingredient-summary" id="ingredient-summary"></aside>
+            <div class="ingredient-table-wrap">
+              <table class="ingredient-table">
+                <thead>
+                  <tr>
+                    <th>Ingredient</th>
+                    <th>Used in</th>
+                    <th>Current $/oz</th>
+                    <th>Bottle oz</th>
+                    <th>Bottle price</th>
+                  </tr>
+                </thead>
+                <tbody id="ingredient-table"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="old-panel" aria-labelledby="old-tab">
+          <div class="toolbar">
+            <label class="search-field">
+              <span>Search old recipes</span>
+              <input id="old-search" type="search" placeholder="Search deactivated cocktails...">
+            </label>
+          </div>
+          <div class="recipe-grid" id="old-recipe-grid"></div>
+        </section>
+      </main>
+    </div>
+
+    <template id="recipe-card-template">
+      <article class="recipe-card">
+        <div class="recipe-card__header">
+          <div>
+            <p class="recipe-card__batch"></p>
+            <h2></h2>
+          </div>
+          <span class="spirit-pill"></span>
+        </div>
+        <div class="recipe-card__actions"></div>
+        <div class="recipe-card__numbers"></div>
+        <div class="recipe-table-wrap">
+          <table class="recipe-table">
+            <thead>
+              <tr>
+                <th>Recipe</th>
+                <th>$</th>
+                <th>Oz</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </article>
+    </template>
+
+    <script src="./app.js" type="module"></script>
+  </body>
+</html>
