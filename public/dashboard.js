@@ -101,8 +101,8 @@ let inactiveRecipeIds = loadInactiveRecipeIds();
 let editedRecipes = loadEditedRecipes();
 let editingRecipeId = null;
 let vendorSyncScope = "all";
-let vendorSyncText = "";
-let vendorSyncMessage = "Use your mapped vendor products below, paste the current bottle prices, then apply them in one shot.";
+let vendorSyncMessage = "Press sync to check mapped vendors automatically. Vendors without a supported connection will report what is still needed.";
+let vendorSyncRunning = false;
 
 init();
 
@@ -409,7 +409,7 @@ function renderIngredientSummary() {
     <div class="summary-line"><span>Estimated catalog cost</span><strong>${money(sum(visibleIngredients.map((item) => getCatalogCost(item))))}</strong></div>
     <div class="sync-panel">
       <h3>Vendor Sync</h3>
-      <p class="sync-copy">Paste vendor prices here using the mapped ingredient or product names. The app will apply the vendor bottle size automatically.</p>
+      <p class="sync-copy">This button uses the server-side sync route. It will update mapped ingredients automatically when a vendor connection is available, and report what is blocked when it is not.</p>
       <label class="sync-field">
         <span>Vendor scope</span>
         <select id="vendor-sync-scope">
@@ -419,13 +419,8 @@ function renderIngredientSummary() {
         </select>
       </label>
       <div class="sync-actions">
-        <button class="ghost-button" id="load-sync-template" type="button">Load template</button>
-        <button class="primary-button" id="apply-sync-prices" type="button">Apply pasted prices</button>
+        <button class="primary-button" id="run-vendor-sync" type="button"${vendorSyncRunning ? " disabled" : ""}>${vendorSyncRunning ? "Syncing..." : "Sync Prices"}</button>
       </div>
-      <label class="sync-field">
-        <span>Paste one line per price</span>
-        <textarea id="vendor-sync-input" rows="10" placeholder="Example: Tito's Handmade Vodka 1.75L = 34.99">${escapeHtml(vendorSyncText)}</textarea>
-      </label>
       <p class="sync-status">${escapeHtml(vendorSyncMessage)}</p>
     </div>
   `;
@@ -1017,37 +1012,18 @@ function titleCaseIngredientName(name) {
 
 function bindIngredientSummaryEvents() {
   const scopeSelect = document.querySelector("#vendor-sync-scope");
-  const syncInput = document.querySelector("#vendor-sync-input");
-  const loadTemplateButton = document.querySelector("#load-sync-template");
-  const applySyncButton = document.querySelector("#apply-sync-prices");
+  const runSyncButton = document.querySelector("#run-vendor-sync");
 
-  if (!scopeSelect || !syncInput || !loadTemplateButton || !applySyncButton) return;
+  if (!scopeSelect || !runSyncButton) return;
 
   scopeSelect.addEventListener("change", () => {
     vendorSyncScope = scopeSelect.value;
   });
 
-  syncInput.addEventListener("input", () => {
-    vendorSyncText = syncInput.value;
-  });
-
-  loadTemplateButton.addEventListener("click", () => {
+  runSyncButton.addEventListener("click", () => {
     vendorSyncScope = scopeSelect.value;
-    vendorSyncText = buildVendorSyncTemplate(vendorSyncScope);
-    vendorSyncMessage = "Template loaded. Add the current bottle price at the end of each line, then apply.";
-    renderIngredientSummary();
+    runVendorSync();
   });
-
-  applySyncButton.addEventListener("click", () => {
-    vendorSyncScope = scopeSelect.value;
-    applyVendorSync();
-  });
-}
-
-function buildVendorSyncTemplate(scope) {
-  return getVendorMappedIngredients(scope)
-    .map((ingredient) => `${ingredient.name} | ${ingredient.vendorProduct.productName} | ${formatNumber(ingredient.vendorProduct.bottleOz)} oz | `)
-    .join("\n");
 }
 
 function getVendorMappedIngredients(scope = "all") {
@@ -1057,61 +1033,68 @@ function getVendorMappedIngredients(scope = "all") {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function applyVendorSync() {
-  const lines = vendorSyncText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  if (!lines.length) {
-    vendorSyncMessage = "Paste at least one price line before applying sync.";
+async function runVendorSync() {
+  const candidates = getVendorMappedIngredients(vendorSyncScope);
+  if (!candidates.length) {
+    vendorSyncMessage = "No mapped ingredients match that vendor scope yet.";
     renderIngredientSummary();
     return;
   }
 
-  const candidates = getVendorMappedIngredients(vendorSyncScope);
-  let applied = 0;
-  let unmatched = 0;
+  vendorSyncRunning = true;
+  vendorSyncMessage = `Checking ${vendorSyncScope === "all" ? "all mapped vendors" : vendorSyncScope}...`;
+  renderIngredientSummary();
 
-  lines.forEach((line) => {
-    const priceMatch = line.match(/(-?\$?\d[\d,]*(?:\.\d{1,2})?)\s*$/);
-    if (!priceMatch) {
-      unmatched += 1;
-      return;
-    }
-
-    const price = toNumber(priceMatch[1]);
-    const lookupText = normalizeSyncLookup(line.slice(0, priceMatch.index));
-    const ingredient = candidates.find((candidate) => {
-      const ingredientName = normalizeSyncLookup(candidate.name);
-      const productName = normalizeSyncLookup(candidate.vendorProduct.productName);
-      return lookupText.includes(productName) || lookupText.includes(ingredientName);
+  try {
+    const response = await fetch("/api/vendor-sync", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        scope: vendorSyncScope,
+        items: candidates.map((ingredient) => ({
+          id: ingredient.id,
+          name: ingredient.name,
+          vendorProduct: ingredient.vendorProduct,
+        })),
+      }),
     });
 
-    if (!ingredient || !price) {
-      unmatched += 1;
-      return;
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result?.error || "Vendor sync failed.");
     }
 
-    priceOverrides[ingredient.id] = {
-      ...(priceOverrides[ingredient.id] || {}),
-      bottleOz: String(ingredient.vendorProduct.bottleOz),
-      bottlePrice: String(price),
-      updatedAt: new Date().toISOString(),
-    };
-    applied += 1;
-  });
+    let applied = 0;
+    (result.updates || []).forEach((update) => {
+      if (!update.id || !Number.isFinite(update.bottleOz) || !Number.isFinite(update.bottlePrice)) return;
+      priceOverrides[update.id] = {
+        ...(priceOverrides[update.id] || {}),
+        bottleOz: String(update.bottleOz),
+        bottlePrice: String(update.bottlePrice),
+        updatedAt: update.updatedAt || new Date().toISOString(),
+      };
+      applied += 1;
+    });
 
-  saveOverrides();
-  vendorSyncMessage = `Applied ${applied} price${applied === 1 ? "" : "s"} from ${vendorSyncScope === "all" ? "all mapped vendors" : vendorSyncScope}.${unmatched ? ` ${unmatched} line${unmatched === 1 ? "" : "s"} did not match.` : ""}`;
-  render();
-}
+    if (applied) {
+      saveOverrides();
+    }
 
-function normalizeSyncLookup(value) {
-  return clean(value)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
+    const statusNotes = (result.vendorStatuses || [])
+      .map((status) => `${status.vendor}: ${status.message}`)
+      .join(" ");
+
+    vendorSyncMessage = `Applied ${applied} price${applied === 1 ? "" : "s"}.${statusNotes ? ` ${statusNotes}` : ""}`;
+    render();
+  } catch (error) {
+    vendorSyncMessage = error.message || "Vendor sync failed.";
+    renderIngredientSummary();
+  } finally {
+    vendorSyncRunning = false;
+    renderIngredientSummary();
+  }
 }
 
 function getIngredientAddAmount(rawValue) {
