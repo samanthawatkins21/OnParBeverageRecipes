@@ -376,6 +376,12 @@ td {
   font-size: 1.45rem;
 }
 
+.ingredient-summary h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-family: "Fraunces", serif;
+}
+
 .summary-line {
   display: flex;
   justify-content: space-between;
@@ -386,6 +392,47 @@ td {
 
 .summary-line strong {
   text-align: right;
+}
+
+.sync-panel {
+  margin-top: 18px;
+  border-top: 1px solid rgba(24, 33, 31, 0.1);
+  padding-top: 18px;
+}
+
+.sync-copy,
+.sync-status {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.sync-field {
+  display: grid;
+  gap: 7px;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.sync-field textarea {
+  width: 100%;
+  min-height: 220px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: var(--paper-strong);
+  padding: 12px 14px;
+  resize: vertical;
+}
+
+.sync-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
 }
 
 .ingredient-table-wrap,

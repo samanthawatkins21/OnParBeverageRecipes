@@ -21,6 +21,22 @@ const PROOF_MAPPINGS = {
   "triple-sec": { vendor: "Proof", productName: "DeKuyper Triple Sec 30 1L", bottleOz: 33.81 },
   "watermelon-schnapps": { vendor: "Proof", productName: "DeKuyper Sour Watermelon Schnapps Pucker 30 1L", bottleOz: 33.81 },
 };
+const OHLQ_MAPPINGS = {
+  "absolut-citron": { vendor: "OHLQ", productName: "Absolut Citron Vodka 1.75L", bottleOz: 59.17 },
+  "bombay-sapphire": { vendor: "OHLQ", productName: "Bombay Sapphire Gin 1.75L", bottleOz: 59.17 },
+  bulleit: { vendor: "OHLQ", productName: "Bulleit Bourbon 1.75L", bottleOz: 59.17 },
+  "captain-morgan": { vendor: "OHLQ", productName: "Captain Morgan Original Spiced Rum 1.75L", bottleOz: 59.17 },
+  "crown-apple": { vendor: "OHLQ", productName: "Crown Royal Regal Apple 1.75L", bottleOz: 59.17 },
+  "crown-royal": { vendor: "OHLQ", productName: "Crown Royal Canadian Whisky 1.75L", bottleOz: 59.17 },
+  "jack-daniel-s": { vendor: "OHLQ", productName: "Jack Daniel's Old No. 7 1.75L", bottleOz: 59.17 },
+  "jack-daniel-s-fire": { vendor: "OHLQ", productName: "Jack Daniel's Tennessee Fire 1.75L", bottleOz: 59.17 },
+  "jim-beam": { vendor: "OHLQ", productName: "Jim Beam Bourbon 1.75L", bottleOz: 59.17 },
+  "jose-cuervo-silver": { vendor: "OHLQ", productName: "Jose Cuervo Especial Silver 1.75L", bottleOz: 59.17 },
+  kahlua: { vendor: "OHLQ", productName: "Kahlua Coffee Liqueur 1L", bottleOz: 33.81 },
+  "ketel-one-cucumber-vodka": { vendor: "OHLQ", productName: "Ketel One Botanical Cucumber & Mint 1L", bottleOz: 33.81 },
+  "svedka-blue-raspberry-vodka": { vendor: "OHLQ", productName: "Svedka Blue Raspberry Vodka 750mL", bottleOz: 25.36 },
+  "tito-s": { vendor: "OHLQ", productName: "Tito's Handmade Vodka 1.75L", bottleOz: 59.17 },
+};
 const MENU_ORDER = [
   ["GIN & JUICE (BOMBAY)", "Ginny from the Block (Gin)"],
   ["CAPTAIN QUENCHER (CAPTAIN MORGAN)", "Captain Quencher (Rum)"],
@@ -84,6 +100,9 @@ let customRecipes = loadCustomRecipes();
 let inactiveRecipeIds = loadInactiveRecipeIds();
 let editedRecipes = loadEditedRecipes();
 let editingRecipeId = null;
+let vendorSyncScope = "all";
+let vendorSyncText = "";
+let vendorSyncMessage = "Use your mapped vendor products below, paste the current bottle prices, then apply them in one shot.";
 
 init();
 
@@ -251,9 +270,10 @@ function createRecipeCard(recipe, state) {
   const tbody = card.querySelector("tbody");
   recipe.ingredients.forEach((ingredient) => {
     const liveCost = getIngredientCost(ingredient);
+    const addAmount = getIngredientAddAmount(ingredient.raw);
     const row = document.createElement("tr");
     row.innerHTML = `
-      <td>${escapeHtml(ingredient.name)}</td>
+      <td><strong>${escapeHtml(ingredient.name)}</strong>${addAmount ? `<span class="table-note">${escapeHtml(addAmount)}</span>` : ""}</td>
       <td class="${liveCost.source === "override" ? "updated-cost" : ""}">${money(liveCost.cost)}</td>
       <td>${formatNumber(ingredient.oz)}</td>
     `;
@@ -351,12 +371,12 @@ function renderIngredients() {
     items.forEach((ingredient) => {
       const override = priceOverrides[ingredient.id] || {};
       const currentUnitCost = getCatalogUnitCost(ingredient);
-      const mappedBottleOz = ingredient.proofProduct?.bottleOz ? formatNumber(ingredient.proofProduct.bottleOz) : "";
+      const mappedBottleOz = ingredient.vendorProduct?.bottleOz ? formatNumber(ingredient.vendorProduct.bottleOz) : "";
       const row = document.createElement("tr");
       row.innerHTML = `
         <td>
           <strong>${escapeHtml(ingredient.name)}</strong>
-          ${ingredient.proofProduct ? `<span class="table-note table-note--accent">${escapeHtml(ingredient.proofProduct.vendor)} mapped</span><span class="table-note">${escapeHtml(ingredient.proofProduct.productName)}</span>` : ""}
+          ${ingredient.vendorProduct ? `<span class="table-note table-note--accent">${escapeHtml(ingredient.vendorProduct.vendor)} mapped</span><span class="table-note">${escapeHtml(ingredient.vendorProduct.productName)}</span>` : ""}
         </td>
         <td>${money(currentUnitCost)}</td>
         <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override.bottleOz ?? "")}" placeholder="${escapeHtml(mappedBottleOz)}" aria-label="Bottle ounces for ${escapeHtml(ingredient.name)}"></td>
@@ -375,15 +395,42 @@ function renderIngredients() {
 
 function renderIngredientSummary() {
   const visibleIngredients = ingredients.filter((ingredient) => ingredient.id !== "water");
+  const proofCount = countVendorMappingsByName(visibleIngredients, "Proof");
+  const ohlqCount = countVendorMappingsByName(visibleIngredients, "OHLQ");
 
   ingredientSummary.innerHTML = `
     <h2>Ingredient pricing</h2>
     <div class="summary-line"><span>Unique ingredients</span><strong>${visibleIngredients.length}</strong></div>
     <div class="summary-line"><span>With bottle overrides</span><strong>${countOverrides()}</strong></div>
-    <div class="summary-line"><span>Mapped to Proof</span><strong>${countProofMappings(visibleIngredients)}</strong></div>
+    <div class="summary-line"><span>Mapped to vendors</span><strong>${countVendorMappings(visibleIngredients)}</strong></div>
+    <div class="summary-line"><span>Proof mapped</span><strong>${proofCount}</strong></div>
+    <div class="summary-line"><span>OHLQ mapped</span><strong>${ohlqCount}</strong></div>
     <div class="summary-line"><span>Total ounces tracked</span><strong>${formatNumber(sum(visibleIngredients.map((item) => item.totalOz)))}</strong></div>
     <div class="summary-line"><span>Estimated catalog cost</span><strong>${money(sum(visibleIngredients.map((item) => getCatalogCost(item))))}</strong></div>
+    <div class="sync-panel">
+      <h3>Vendor Sync</h3>
+      <p class="sync-copy">Paste vendor prices here using the mapped ingredient or product names. The app will apply the vendor bottle size automatically.</p>
+      <label class="sync-field">
+        <span>Vendor scope</span>
+        <select id="vendor-sync-scope">
+          <option value="all"${vendorSyncScope === "all" ? " selected" : ""}>All mapped vendors</option>
+          <option value="Proof"${vendorSyncScope === "Proof" ? " selected" : ""}>Proof</option>
+          <option value="OHLQ"${vendorSyncScope === "OHLQ" ? " selected" : ""}>OHLQ</option>
+        </select>
+      </label>
+      <div class="sync-actions">
+        <button class="ghost-button" id="load-sync-template" type="button">Load template</button>
+        <button class="primary-button" id="apply-sync-prices" type="button">Apply pasted prices</button>
+      </div>
+      <label class="sync-field">
+        <span>Paste one line per price</span>
+        <textarea id="vendor-sync-input" rows="10" placeholder="Example: Tito's Handmade Vodka 1.75L = 34.99">${escapeHtml(vendorSyncText)}</textarea>
+      </label>
+      <p class="sync-status">${escapeHtml(vendorSyncMessage)}</p>
+    </div>
   `;
+
+  bindIngredientSummaryEvents();
 }
 
 function saveIngredientOverride(id, bottleOz, bottlePrice) {
@@ -665,7 +712,7 @@ function buildIngredientCatalog(sourceRecipes) {
         byId.set(ingredient.id, {
           id: ingredient.id,
           name: ingredient.name,
-          proofProduct: getProofMapping(ingredient.id),
+          vendorProduct: getVendorMapping(ingredient.id),
           totalCost: 0,
           totalOz: 0,
           recipes: [],
@@ -770,8 +817,12 @@ function countOverrides() {
   }).length;
 }
 
-function countProofMappings(sourceIngredients = ingredients) {
-  return sourceIngredients.filter((ingredient) => ingredient.proofProduct).length;
+function countVendorMappings(sourceIngredients = ingredients) {
+  return sourceIngredients.filter((ingredient) => ingredient.vendorProduct).length;
+}
+
+function countVendorMappingsByName(sourceIngredients, vendorName) {
+  return sourceIngredients.filter((ingredient) => ingredient.vendorProduct?.vendor === vendorName).length;
 }
 
 function groupIngredientsForDisplay(sourceIngredients) {
@@ -785,7 +836,7 @@ function groupIngredientsForDisplay(sourceIngredients) {
     grouped.get(groupName).push(ingredient);
   });
 
-  return ["Liquor", "Liqueurs & Schnapps", "Soda Machine", "Juices & Mixers", "Syrups & Housemade", "Cold Brew", "Other"]
+  return ["Liquor", "Proof", "Buckeye Beverage", "Food Vendors", "Syrups & Housemade", "Cold Brew", "Other"]
     .map((groupName) => [
       groupName,
       (grouped.get(groupName) || []).sort((a, b) => getIngredientSortKey(a).localeCompare(getIngredientSortKey(b))),
@@ -874,28 +925,30 @@ function getRecipeFlavor(recipeTitle) {
   return match ? capitalize(match[0].toLowerCase()) : "";
 }
 
-function getProofMapping(ingredientId) {
-  return PROOF_MAPPINGS[ingredientId] || null;
+function getVendorMapping(ingredientId) {
+  return PROOF_MAPPINGS[ingredientId] || OHLQ_MAPPINGS[ingredientId] || null;
 }
 
 function normalizeIngredientAlias(name) {
   const normalized = clean(name).toLowerCase();
 
-  if (/^tito'?s(\s+vodka)?$/.test(normalized)) return "Tito's Vodka";
+  if (/^tito'?s(\s+vodka)?$/.test(normalized)) return "Tito's";
   if (/^ket(t)?le one cucumber vodka$/.test(normalized)) return "Ketel One Cucumber Vodka";
   if (/^jose cuervo(\s+silver)?$/.test(normalized)) return "Jose Cuervo Silver";
   if (/^pomegrante schnapps$/.test(normalized)) return "Pomegranate Schnapps";
-  if (/^crown apple royal$/.test(normalized) || /^crown apple$/.test(normalized)) return "Crown Royal Apple";
+  if (/^crown apple royal$/.test(normalized) || /^crown apple$/.test(normalized) || /^crown apple 6-?$/.test(normalized)) return "Crown Apple";
   if (/^jack daniels fire$/.test(normalized)) return "Jack Daniel's Fire";
   if (/^jack daniels$/.test(normalized)) return "Jack Daniel's";
-  if (/^svedka blue raspberry$/.test(normalized)) return "Svedka Blue Raspberry Vodka";
+  if (/^\d+\s+svedka blue raspberry$/.test(normalized) || /^svedka blue raspberry$/.test(normalized)) return "Svedka Blue Raspberry Vodka";
   if (/^gallon lemonade$/.test(normalized) || /^lemonade$/.test(normalized)) return "Lemonade";
+  if (/pink lemonade$/.test(normalized)) return "Pink Lemonade";
   if (/strawberry lemonade$/.test(normalized)) return "Strawberry Lemonade";
   if (/^cranberry juice$/.test(normalized) || /^cranberry$/.test(normalized)) return "Cranberry Juice";
   if (/^simple syrup$/.test(normalized)) return "Simple Syrup";
   if (/^sour mix$/.test(normalized)) return "Sour Mix";
   if (/^lime juice$/.test(normalized)) return "Lime Juice";
   if (/^lemon juice$/.test(normalized)) return "Lemon Juice";
+  if (/^creme de cocao$/.test(normalized)) return "Creme de Cacao";
   if (/^llords /.test(normalized)) return titleCaseIngredientName(name.replace(/^Llords/i, "Llord's"));
 
   return titleCaseIngredientName(name);
@@ -904,27 +957,37 @@ function normalizeIngredientAlias(name) {
 function getIngredientGroup(name) {
   const normalized = clean(name).toLowerCase();
 
-  if (["lemonade", "cranberry juice", "sweet tea", "strawberry lemonade"].includes(normalized)) return "Soda Machine";
+  if (["lemonade", "pink lemonade", "cranberry juice", "sweet tea", "strawberry lemonade"].includes(normalized)) return "Buckeye Beverage";
   if (normalized === "cold brew coffee") return "Cold Brew";
-  if (normalized === "blue Dot Juice".toLowerCase()) return "Syrups & Housemade";
-  if (normalized === "simple syrup" || normalized.includes("syrup") || normalized === "mint") return "Syrups & Housemade";
-  if (normalized.includes("juice") || normalized.includes("mix") || normalized.includes("blue dot")) return "Juices & Mixers";
+  if (normalized === "sour mix" || normalized === "vanilla") return "Food Vendors";
   if (
+    normalized === "triple sec" ||
+    normalized === "bitters" ||
+    normalized === "creme de cacao" ||
+    normalized === "mint" ||
+    normalized === "lime juice" ||
+    normalized === "lemon juice" ||
     normalized.includes("schnapps") ||
-    normalized.includes("pucker") ||
-    normalized.includes("triple sec") ||
-    normalized.includes("creme de cacao") ||
-    normalized.includes("bitters")
+    normalized.includes("pucker")
   ) {
-    return "Liqueurs & Schnapps";
+    return "Proof";
   }
+  if (normalized === "blue Dot Juice".toLowerCase()) return "Syrups & Housemade";
+  if (normalized === "simple syrup" || normalized.includes("syrup")) return "Syrups & Housemade";
+  if (
+    normalized.includes("juice") ||
+    normalized.includes("mix") ||
+    normalized.includes("blue dot")
+  ) return "Other";
   if (
     normalized.includes("vodka") ||
+    normalized === "tito's" ||
     normalized.includes("gin") ||
     normalized.includes("rum") ||
     normalized.includes("tequila") ||
     normalized.includes("whiskey") ||
     normalized.includes("bourbon") ||
+    normalized.includes("crown apple") ||
     normalized.includes("crown royal") ||
     normalized.includes("jose cuervo") ||
     normalized.includes("bombay") ||
@@ -950,6 +1013,122 @@ function getIngredientSortKey(ingredient) {
 
 function titleCaseIngredientName(name) {
   return clean(name).replace(/\b([a-z])([a-z']*)/gi, (_, first, rest) => `${first.toUpperCase()}${rest.toLowerCase()}`);
+}
+
+function bindIngredientSummaryEvents() {
+  const scopeSelect = document.querySelector("#vendor-sync-scope");
+  const syncInput = document.querySelector("#vendor-sync-input");
+  const loadTemplateButton = document.querySelector("#load-sync-template");
+  const applySyncButton = document.querySelector("#apply-sync-prices");
+
+  if (!scopeSelect || !syncInput || !loadTemplateButton || !applySyncButton) return;
+
+  scopeSelect.addEventListener("change", () => {
+    vendorSyncScope = scopeSelect.value;
+  });
+
+  syncInput.addEventListener("input", () => {
+    vendorSyncText = syncInput.value;
+  });
+
+  loadTemplateButton.addEventListener("click", () => {
+    vendorSyncScope = scopeSelect.value;
+    vendorSyncText = buildVendorSyncTemplate(vendorSyncScope);
+    vendorSyncMessage = "Template loaded. Add the current bottle price at the end of each line, then apply.";
+    renderIngredientSummary();
+  });
+
+  applySyncButton.addEventListener("click", () => {
+    vendorSyncScope = scopeSelect.value;
+    applyVendorSync();
+  });
+}
+
+function buildVendorSyncTemplate(scope) {
+  return getVendorMappedIngredients(scope)
+    .map((ingredient) => `${ingredient.name} | ${ingredient.vendorProduct.productName} | ${formatNumber(ingredient.vendorProduct.bottleOz)} oz | `)
+    .join("\n");
+}
+
+function getVendorMappedIngredients(scope = "all") {
+  return ingredients
+    .filter((ingredient) => ingredient.id !== "water" && ingredient.vendorProduct)
+    .filter((ingredient) => scope === "all" || ingredient.vendorProduct.vendor === scope)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function applyVendorSync() {
+  const lines = vendorSyncText
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (!lines.length) {
+    vendorSyncMessage = "Paste at least one price line before applying sync.";
+    renderIngredientSummary();
+    return;
+  }
+
+  const candidates = getVendorMappedIngredients(vendorSyncScope);
+  let applied = 0;
+  let unmatched = 0;
+
+  lines.forEach((line) => {
+    const priceMatch = line.match(/(-?\$?\d[\d,]*(?:\.\d{1,2})?)\s*$/);
+    if (!priceMatch) {
+      unmatched += 1;
+      return;
+    }
+
+    const price = toNumber(priceMatch[1]);
+    const lookupText = normalizeSyncLookup(line.slice(0, priceMatch.index));
+    const ingredient = candidates.find((candidate) => {
+      const ingredientName = normalizeSyncLookup(candidate.name);
+      const productName = normalizeSyncLookup(candidate.vendorProduct.productName);
+      return lookupText.includes(productName) || lookupText.includes(ingredientName);
+    });
+
+    if (!ingredient || !price) {
+      unmatched += 1;
+      return;
+    }
+
+    priceOverrides[ingredient.id] = {
+      ...(priceOverrides[ingredient.id] || {}),
+      bottleOz: String(ingredient.vendorProduct.bottleOz),
+      bottlePrice: String(price),
+      updatedAt: new Date().toISOString(),
+    };
+    applied += 1;
+  });
+
+  saveOverrides();
+  vendorSyncMessage = `Applied ${applied} price${applied === 1 ? "" : "s"} from ${vendorSyncScope === "all" ? "all mapped vendors" : vendorSyncScope}.${unmatched ? ` ${unmatched} line${unmatched === 1 ? "" : "s"} did not match.` : ""}`;
+  render();
+}
+
+function normalizeSyncLookup(value) {
+  return clean(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function getIngredientAddAmount(rawValue) {
+  const raw = clean(rawValue);
+  if (!raw) return "";
+
+  if (raw.includes("=")) {
+    const afterEquals = clean(raw.split("=").slice(1).join("="));
+    return afterEquals.replace(/\s*=\s*.*$/, "").trim();
+  }
+
+  const quantityMatch = raw.match(/(\d+(?:\.\d+)?)\s*(bottles?|btls?|gallons?|oz|cups?|packets?|pitchers?)(.*)$/i);
+  if (quantityMatch) {
+    return clean(quantityMatch[0]);
+  }
+
+  return "";
 }
 
 function isMetricLabel(value) {
