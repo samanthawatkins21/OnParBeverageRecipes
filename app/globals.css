@@ -396,17 +396,18 @@ td {
 }
 
 .ingredient-table th:nth-child(1) {
-  width: 34%;
+  width: 28%;
 }
 
-.ingredient-table th:nth-child(2) {
-  width: 24%;
-}
-
+.ingredient-table th:nth-child(2),
 .ingredient-table th:nth-child(3),
 .ingredient-table th:nth-child(4),
 .ingredient-table th:nth-child(5) {
-  width: 14%;
+  width: 16%;
+}
+
+.ingredient-table th:nth-child(6) {
+  width: 8%;
 }
 
 .ingredient-table input {
@@ -430,6 +431,12 @@ td {
   background:
     linear-gradient(110deg, rgba(31, 95, 84, 0.12), transparent),
     linear-gradient(0deg, rgba(214, 166, 61, 0.12), transparent);
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .form-header h2,

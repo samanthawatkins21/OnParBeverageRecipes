@@ -4,6 +4,7 @@ const STORAGE_KEY = "cocktail-dashboard-ingredient-prices";
 const CHARGE_STORAGE_KEY = "cocktail-dashboard-charge-prices";
 const CUSTOM_RECIPE_STORAGE_KEY = "cocktail-dashboard-custom-recipes";
 const INACTIVE_RECIPE_STORAGE_KEY = "cocktail-dashboard-inactive-recipes";
+const EDITED_RECIPE_STORAGE_KEY = "cocktail-dashboard-edited-recipes";
 const MENU_ORDER = [
   ["GIN & JUICE (BOMBAY)", "Ginny from the Block (Gin)"],
   ["CAPTAIN QUENCHER (CAPTAIN MORGAN)", "Captain Quencher (Rum)"],
@@ -52,6 +53,9 @@ const ingredientSummary = document.querySelector("#ingredient-summary");
 const clearPricesButton = document.querySelector("#clear-prices");
 const clearChargesButton = document.querySelector("#clear-charges");
 const recipeForm = document.querySelector("#recipe-form");
+const recipeFormTitle = document.querySelector("#recipe-form-title");
+const recipeSubmitButton = document.querySelector("#recipe-submit-button");
+const cancelEditButton = document.querySelector("#cancel-edit");
 const addIngredientRowButton = document.querySelector("#add-ingredient-row");
 const newIngredientRows = document.querySelector("#new-ingredient-rows");
 const cardTemplate = document.querySelector("#recipe-card-template");
@@ -62,6 +66,8 @@ let priceOverrides = loadOverrides();
 let chargeOverrides = loadChargeOverrides();
 let customRecipes = loadCustomRecipes();
 let inactiveRecipeIds = loadInactiveRecipeIds();
+let editedRecipes = loadEditedRecipes();
+let editingRecipeId = null;
 
 init();
 
@@ -75,7 +81,7 @@ async function init() {
     ...applyMenuOrder(parseRecipes(parseCsv(csv))),
     ...applyRecipeOrder(parseRecipes(parseCsv(newCocktailsCsv)), NEW_RECIPE_ORDER),
     ...customRecipes,
-  ];
+  ].map(applyRecipeEdits);
   ingredients = buildIngredientCatalog(getActiveRecipes());
   hydrateCategoryFilter(recipes);
   bindEvents();
@@ -97,6 +103,7 @@ function bindEvents() {
   ingredientSearch.addEventListener("input", renderIngredients);
   recipeForm.addEventListener("submit", addCustomRecipe);
   addIngredientRowButton.addEventListener("click", addIngredientRow);
+  cancelEditButton.addEventListener("click", resetRecipeForm);
   clearPricesButton.addEventListener("click", () => {
     priceOverrides = {};
     saveOverrides();
@@ -201,9 +208,11 @@ function createRecipeCard(recipe, state) {
   card.querySelector(".spirit-pill").textContent = recipe.category;
   const actions = card.querySelector(".recipe-card__actions");
   actions.innerHTML = `
+    <button class="mini-button" data-action="edit" type="button">Edit</button>
     <button class="mini-button" data-action="toggle" type="button">${state === "active" ? "Deactivate" : "Reactivate"}</button>
     ${state === "inactive" && recipe.isCustom ? '<button class="mini-button mini-button--danger" data-action="delete" type="button">Delete custom</button>' : ""}
   `;
+  actions.querySelector('[data-action="edit"]').addEventListener("click", () => startEditingRecipe(recipe.id));
   actions.querySelector('[data-action="toggle"]').addEventListener("click", () => {
     if (state === "active") {
       deactivateRecipe(recipe.id);
@@ -320,15 +329,16 @@ function renderIngredients() {
     const row = document.createElement("tr");
     row.innerHTML = `
       <td><strong>${escapeHtml(ingredient.name)}</strong></td>
-      <td class="muted">${escapeHtml(ingredient.recipes.slice(0, 3).join(", "))}${ingredient.recipes.length > 3 ? ` +${ingredient.recipes.length - 3}` : ""}</td>
       <td>${money(currentUnitCost)}</td>
       <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override.bottleOz ?? "")}" aria-label="Bottle ounces for ${escapeHtml(ingredient.name)}"></td>
       <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override.bottlePrice ?? "")}" aria-label="Bottle price for ${escapeHtml(ingredient.name)}"></td>
+      <td class="muted">${formatUpdatedAt(override.updatedAt)}</td>
+      <td><button class="mini-button" type="button">Update</button></td>
     `;
 
     const [bottleOzInput, bottlePriceInput] = row.querySelectorAll("input");
-    bottleOzInput.addEventListener("input", () => setOverride(ingredient.id, "bottleOz", bottleOzInput.value));
-    bottlePriceInput.addEventListener("input", () => setOverride(ingredient.id, "bottlePrice", bottlePriceInput.value));
+    const updateButton = row.querySelector("button");
+    updateButton.addEventListener("click", () => saveIngredientOverride(ingredient.id, bottleOzInput.value, bottlePriceInput.value));
     ingredientTable.append(row);
   });
 }
@@ -343,16 +353,21 @@ function renderIngredientSummary() {
   `;
 }
 
-function setOverride(id, field, value) {
-  priceOverrides[id] = { ...(priceOverrides[id] || {}), [field]: value };
-  if (!priceOverrides[id].bottleOz && !priceOverrides[id].bottlePrice) {
+function saveIngredientOverride(id, bottleOz, bottlePrice) {
+  const nextOverride = {
+    ...(priceOverrides[id] || {}),
+    bottleOz,
+    bottlePrice,
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (!nextOverride.bottleOz && !nextOverride.bottlePrice) {
     delete priceOverrides[id];
+  } else {
+    priceOverrides[id] = nextOverride;
   }
   saveOverrides();
-  renderStats();
-  renderRecipes();
-  renderPricing();
-  renderIngredientSummary();
+  render();
 }
 
 function setChargeOverride(id, value) {
@@ -385,39 +400,56 @@ function addCustomRecipe(event) {
   }).filter((ingredient) => ingredient.name);
 
   const recipe = {
-    id: `custom-${Date.now()}-${slugify(title)}`,
+    id: editingRecipeId || `custom-${Date.now()}-${slugify(title)}`,
     title,
     batch: clean(document.querySelector("#new-recipe-batch").value),
     category: clean(document.querySelector("#new-recipe-category").value) || "Other",
     defaultChargePerOz: toNumber(document.querySelector("#new-recipe-charge").value),
     ingredients: ingredientsForRecipe,
     metrics: [],
-    isCustom: true,
+    isCustom: editingRecipeId ? recipes.find((item) => item.id === editingRecipeId)?.isCustom === true : true,
   };
 
-  customRecipes.push(recipe);
-  recipes.push(recipe);
-  saveCustomRecipes();
-  recipeForm.reset();
-  newIngredientRows.innerHTML = "";
-  addIngredientRow();
-  addIngredientRow();
-  addIngredientRow();
+  if (editingRecipeId) {
+    const existingRecipe = recipes.find((item) => item.id === editingRecipeId);
+    recipe.sourceTitle = existingRecipe?.sourceTitle;
+    recipes = recipes.map((item) => (item.id === editingRecipeId ? recipe : item));
+
+    if (recipe.isCustom) {
+      customRecipes = customRecipes.map((item) => (item.id === editingRecipeId ? recipe : item));
+      saveCustomRecipes();
+    } else {
+      editedRecipes[recipe.id] = {
+        title: recipe.title,
+        batch: recipe.batch,
+        category: recipe.category,
+        defaultChargePerOz: recipe.defaultChargePerOz,
+        ingredients: recipe.ingredients,
+      };
+      saveEditedRecipes();
+    }
+  } else {
+    customRecipes.push(recipe);
+    recipes.push(recipe);
+    saveCustomRecipes();
+  }
+
+  resetRecipeForm();
   switchTab("recipes");
   render();
 }
 
-function addIngredientRow() {
+function addIngredientRow(ingredient = null) {
   const row = document.createElement("tr");
   const isFirstRow = newIngredientRows.children.length === 0;
   if (isFirstRow) row.classList.add("primary-liquor-row");
   row.innerHTML = `
     <td>
       ${isFirstRow ? '<span class="row-badge">Liquor row</span>' : ""}
-      <input type="text" placeholder="${isFirstRow ? "Liquor / primary alcohol" : "Ingredient name"}" aria-label="${isFirstRow ? "New recipe primary liquor" : "New recipe ingredient"}">
+      <input type="text" value="${escapeHtml(ingredient?.name || "")}" placeholder="${isFirstRow ? "Liquor / primary alcohol" : "Ingredient name"}" aria-label="${isFirstRow ? "New recipe primary liquor" : "New recipe ingredient"}">
     </td>
-    <td><input type="text" inputmode="decimal" placeholder="0.00" aria-label="New recipe ingredient cost"></td>
-    <td><input type="text" inputmode="decimal" placeholder="0" aria-label="New recipe ingredient ounces"></td>
+    <td><input type="text" inputmode="decimal" value="${escapeHtml(ingredient?.cost || "")}" placeholder="0.00" aria-label="New recipe ingredient cost"></td>
+    <td><input type="text" inputmode="decimal" value="${escapeHtml(ingredient?.oz || "")}" placeholder="0" aria-label="New recipe ingredient ounces"></td>
     <td><button class="icon-button" type="button" aria-label="Remove ingredient row">x</button></td>
   `;
   row.querySelector("button").addEventListener("click", () => row.remove());
@@ -447,6 +479,42 @@ function deleteCustomRecipe(id) {
   saveInactiveRecipeIds();
   saveChargeOverrides();
   render();
+}
+
+function startEditingRecipe(id) {
+  const recipe = recipes.find((item) => item.id === id);
+  if (!recipe) return;
+
+  editingRecipeId = id;
+  recipeFormTitle.textContent = `Edit ${recipe.title}`;
+  recipeSubmitButton.textContent = "Save changes";
+  cancelEditButton.hidden = false;
+  recipeForm.reset();
+  newIngredientRows.innerHTML = "";
+  document.querySelector("#new-recipe-title").value = recipe.title;
+  document.querySelector("#new-recipe-batch").value = recipe.batch || "";
+  document.querySelector("#new-recipe-category").value = recipe.category || "Other";
+  document.querySelector("#new-recipe-charge").value = recipe.defaultChargePerOz || "";
+
+  if (recipe.ingredients.length) {
+    recipe.ingredients.forEach((ingredient) => addIngredientRow(ingredient));
+  } else {
+    addIngredientRow();
+  }
+
+  switchTab("add");
+}
+
+function resetRecipeForm() {
+  editingRecipeId = null;
+  recipeFormTitle.textContent = "Add a new cocktail";
+  recipeSubmitButton.textContent = "Add recipe";
+  cancelEditButton.hidden = true;
+  recipeForm.reset();
+  newIngredientRows.innerHTML = "";
+  addIngredientRow();
+  addIngredientRow();
+  addIngredientRow();
 }
 
 function hydrateCategoryFilter(sourceRecipes) {
@@ -479,6 +547,24 @@ function applyRecipeOrder(sourceRecipes, order) {
       metrics: source.metrics.map((metric) => ({ ...metric })),
     };
   }).filter(Boolean);
+}
+
+function applyRecipeEdits(recipe) {
+  const edits = editedRecipes[recipe.id];
+  if (!edits) return recipe;
+
+  return {
+    ...recipe,
+    ...edits,
+    ingredients: (edits.ingredients || []).map((ingredient) => ({
+      ...ingredient,
+      id: slugify(ingredient.name),
+      raw: ingredient.name,
+      name: ingredient.name,
+      cost: toNumber(ingredient.cost),
+      oz: toNumber(ingredient.oz),
+    })),
+  };
 }
 
 async function fetchCsv(path) {
@@ -517,9 +603,9 @@ function parseRecipes(rows) {
       }
 
       ingredientsForRecipe.push({
-        id: slugify(extractIngredientName(label)),
+        id: slugify(getIngredientName(label, group.title)),
         raw: label,
-        name: extractIngredientName(label),
+        name: getIngredientName(label, group.title),
         cost: toNumber(costCell),
         oz: toNumber(ozCell),
       });
@@ -709,14 +795,26 @@ function inferCategory(title) {
   return "Other";
 }
 
-function extractIngredientName(value) {
-  return clean(value)
+function getIngredientName(value, recipeTitle = "") {
+  const cleanedName = clean(value)
     .replace(/^\d+(\.\d+)?\s*(gallons?|oz|cups?)\s+/i, "")
     .replace(/\s*=\s*.*$/, "")
     .replace(/\s*\([^)]*\)\s*$/g, "")
     .replace(/\b\d+(\.\d+)?\s*(bottles?|btls?|liter|liters|l|ml|oz|gallons?|cups?|diluted|pitchers|packets|water)\b/gi, "")
     .replace(/\s{2,}/g, " ")
     .trim();
+
+  if (/^flavored schnapps$/i.test(cleanedName)) {
+    const flavor = getRecipeFlavor(recipeTitle);
+    if (flavor) return `${flavor} Schnapps`;
+  }
+
+  return cleanedName;
+}
+
+function getRecipeFlavor(recipeTitle) {
+  const match = clean(recipeTitle).match(/blueberry|strawberry|raspberry|watermelon|peach/i);
+  return match ? capitalize(match[0].toLowerCase()) : "";
 }
 
 function isMetricLabel(value) {
@@ -776,6 +874,18 @@ function saveInactiveRecipeIds() {
   localStorage.setItem(INACTIVE_RECIPE_STORAGE_KEY, JSON.stringify(inactiveRecipeIds));
 }
 
+function loadEditedRecipes() {
+  try {
+    return JSON.parse(localStorage.getItem(EDITED_RECIPE_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveEditedRecipes() {
+  localStorage.setItem(EDITED_RECIPE_STORAGE_KEY, JSON.stringify(editedRecipes));
+}
+
 function clean(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
@@ -809,11 +919,30 @@ function formatNumber(value) {
   }).format(value || 0);
 }
 
+function formatUpdatedAt(value) {
+  if (!value) return "Not updated";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not updated";
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
 function slugify(value) {
   return clean(value)
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+function capitalize(value) {
+  return value ? value[0].toUpperCase() + value.slice(1) : "";
 }
 
 function escapeHtml(value) {

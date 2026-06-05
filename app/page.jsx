@@ -88,9 +88,12 @@ export default function DashboardPage() {
             <div className="form-header">
               <div>
                 <p className="eyebrow">Recipe builder</p>
-                <h2>Add a new cocktail</h2>
+                <h2 id="recipe-form-title">Add a new cocktail</h2>
               </div>
-              <button className="primary-button" type="submit">Add recipe</button>
+              <div className="form-actions">
+                <button className="ghost-button" id="cancel-edit" type="button" hidden>Cancel edit</button>
+                <button className="primary-button" id="recipe-submit-button" type="submit">Add recipe</button>
+              </div>
             </div>
 
             <div className="form-grid">
@@ -158,10 +161,11 @@ export default function DashboardPage() {
                 <thead>
                   <tr>
                     <th>Ingredient</th>
-                    <th>Used in</th>
                     <th>Current $/oz</th>
                     <th>Bottle oz</th>
                     <th>Bottle price</th>
+                    <th>Last updated</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody id="ingredient-table"></tbody>
