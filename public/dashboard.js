@@ -5,6 +5,22 @@ const CHARGE_STORAGE_KEY = "cocktail-dashboard-charge-prices";
 const CUSTOM_RECIPE_STORAGE_KEY = "cocktail-dashboard-custom-recipes";
 const INACTIVE_RECIPE_STORAGE_KEY = "cocktail-dashboard-inactive-recipes";
 const EDITED_RECIPE_STORAGE_KEY = "cocktail-dashboard-edited-recipes";
+const PROOF_MAPPINGS = {
+  "apple-pucker": { vendor: "Proof", productName: "DeKuyper Sour Apple Schnapps Pucker 30 1L", bottleOz: 33.81 },
+  "apple-schnapps": { vendor: "Proof", productName: "Llord's Apple Schnapps 1L", bottleOz: 33.81 },
+  bitters: { vendor: "Proof", productName: "Angostura Bitters Aromatic 16oz", bottleOz: 16 },
+  "blueberry-schnapps": { vendor: "Proof", productName: "DeKuyper Blueberry Schnapps 30 1L", bottleOz: 33.81 },
+  "creme-de-cacao": { vendor: "Proof", productName: "Llords Creme De Cacao 30 1L", bottleOz: 33.81 },
+  "lemon-juice": { vendor: "Proof", productName: "Finest Call Single Pressed Lemon Juice 1L", bottleOz: 33.81 },
+  "lime-juice": { vendor: "Proof", productName: "Finest Call Lime Juice 1L", bottleOz: 33.81 },
+  mint: { vendor: "Proof", productName: "Master of Mixes Cocktail Mixer - Other Mint Syrup Cocktail Essentials 375mL", bottleOz: 12.68 },
+  "peach-schnapps": { vendor: "Proof", productName: "DeKuyper Peach Schnapps Peachtree 30 1L", bottleOz: 33.81 },
+  "pomegranate-schnapps": { vendor: "Proof", productName: "DeKuyper Pomegranate Schnapps Pomegranate Pleasure 30 1L", bottleOz: 33.81 },
+  "raspberry-schnapps": { vendor: "Proof", productName: "DeKuyper Raspberry Schnapps 33 1L", bottleOz: 33.81 },
+  "strawberry-schnapps": { vendor: "Proof", productName: "DeKuyper Sour Strawberry Schnapps Pucker 30 1L", bottleOz: 33.81 },
+  "triple-sec": { vendor: "Proof", productName: "DeKuyper Triple Sec 30 1L", bottleOz: 33.81 },
+  "watermelon-schnapps": { vendor: "Proof", productName: "DeKuyper Sour Watermelon Schnapps Pucker 30 1L", bottleOz: 33.81 },
+};
 const MENU_ORDER = [
   ["GIN & JUICE (BOMBAY)", "Ginny from the Block (Gin)"],
   ["CAPTAIN QUENCHER (CAPTAIN MORGAN)", "Captain Quencher (Rum)"],
@@ -317,39 +333,56 @@ function renderPricingSummary() {
 function renderIngredients() {
   const searchTerm = ingredientSearch.value.trim().toLowerCase();
   const visibleIngredients = ingredients.filter((ingredient) => {
+    if (ingredient.id === "water") return false;
     const haystack = `${ingredient.name} ${ingredient.recipes.join(" ")}`.toLowerCase();
     return haystack.includes(searchTerm);
   });
+  const groupedIngredients = groupIngredientsForDisplay(visibleIngredients);
 
   renderIngredientSummary();
   ingredientTable.innerHTML = "";
-  visibleIngredients.forEach((ingredient) => {
-    const override = priceOverrides[ingredient.id] || {};
-    const currentUnitCost = getCatalogUnitCost(ingredient);
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td><strong>${escapeHtml(ingredient.name)}</strong></td>
-      <td>${money(currentUnitCost)}</td>
-      <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override.bottleOz ?? "")}" aria-label="Bottle ounces for ${escapeHtml(ingredient.name)}"></td>
-      <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override.bottlePrice ?? "")}" aria-label="Bottle price for ${escapeHtml(ingredient.name)}"></td>
-      <td class="muted">${formatUpdatedAt(override.updatedAt)}</td>
-      <td><button class="mini-button" type="button">Update</button></td>
-    `;
 
-    const [bottleOzInput, bottlePriceInput] = row.querySelectorAll("input");
-    const updateButton = row.querySelector("button");
-    updateButton.addEventListener("click", () => saveIngredientOverride(ingredient.id, bottleOzInput.value, bottlePriceInput.value));
-    ingredientTable.append(row);
+  groupedIngredients.forEach(([groupName, items]) => {
+    const groupRow = document.createElement("tr");
+    groupRow.className = "ingredient-group-row";
+    groupRow.innerHTML = `<td colspan="6">${escapeHtml(groupName)}</td>`;
+    ingredientTable.append(groupRow);
+
+    items.forEach((ingredient) => {
+      const override = priceOverrides[ingredient.id] || {};
+      const currentUnitCost = getCatalogUnitCost(ingredient);
+      const mappedBottleOz = ingredient.proofProduct?.bottleOz ? formatNumber(ingredient.proofProduct.bottleOz) : "";
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>
+          <strong>${escapeHtml(ingredient.name)}</strong>
+          ${ingredient.proofProduct ? `<span class="table-note table-note--accent">${escapeHtml(ingredient.proofProduct.vendor)} mapped</span><span class="table-note">${escapeHtml(ingredient.proofProduct.productName)}</span>` : ""}
+        </td>
+        <td>${money(currentUnitCost)}</td>
+        <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override.bottleOz ?? "")}" placeholder="${escapeHtml(mappedBottleOz)}" aria-label="Bottle ounces for ${escapeHtml(ingredient.name)}"></td>
+        <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override.bottlePrice ?? "")}" aria-label="Bottle price for ${escapeHtml(ingredient.name)}"></td>
+        <td class="muted">${formatUpdatedAt(override.updatedAt)}</td>
+        <td><button class="mini-button" type="button">Update</button></td>
+      `;
+
+      const [bottleOzInput, bottlePriceInput] = row.querySelectorAll("input");
+      const updateButton = row.querySelector("button");
+      updateButton.addEventListener("click", () => saveIngredientOverride(ingredient.id, bottleOzInput.value, bottlePriceInput.value));
+      ingredientTable.append(row);
+    });
   });
 }
 
 function renderIngredientSummary() {
+  const visibleIngredients = ingredients.filter((ingredient) => ingredient.id !== "water");
+
   ingredientSummary.innerHTML = `
     <h2>Ingredient pricing</h2>
-    <div class="summary-line"><span>Unique ingredients</span><strong>${ingredients.length}</strong></div>
+    <div class="summary-line"><span>Unique ingredients</span><strong>${visibleIngredients.length}</strong></div>
     <div class="summary-line"><span>With bottle overrides</span><strong>${countOverrides()}</strong></div>
-    <div class="summary-line"><span>Total ounces tracked</span><strong>${formatNumber(sum(ingredients.map((item) => item.totalOz)))}</strong></div>
-    <div class="summary-line"><span>Estimated catalog cost</span><strong>${money(sum(ingredients.map((item) => getCatalogCost(item))))}</strong></div>
+    <div class="summary-line"><span>Mapped to Proof</span><strong>${countProofMappings(visibleIngredients)}</strong></div>
+    <div class="summary-line"><span>Total ounces tracked</span><strong>${formatNumber(sum(visibleIngredients.map((item) => item.totalOz)))}</strong></div>
+    <div class="summary-line"><span>Estimated catalog cost</span><strong>${money(sum(visibleIngredients.map((item) => getCatalogCost(item))))}</strong></div>
   `;
 }
 
@@ -632,6 +665,7 @@ function buildIngredientCatalog(sourceRecipes) {
         byId.set(ingredient.id, {
           id: ingredient.id,
           name: ingredient.name,
+          proofProduct: getProofMapping(ingredient.id),
           totalCost: 0,
           totalOz: 0,
           recipes: [],
@@ -736,6 +770,29 @@ function countOverrides() {
   }).length;
 }
 
+function countProofMappings(sourceIngredients = ingredients) {
+  return sourceIngredients.filter((ingredient) => ingredient.proofProduct).length;
+}
+
+function groupIngredientsForDisplay(sourceIngredients) {
+  const grouped = new Map();
+
+  sourceIngredients.forEach((ingredient) => {
+    const groupName = getIngredientGroup(ingredient.name);
+    if (!grouped.has(groupName)) {
+      grouped.set(groupName, []);
+    }
+    grouped.get(groupName).push(ingredient);
+  });
+
+  return ["Liquor", "Liqueurs & Schnapps", "Soda Machine", "Juices & Mixers", "Syrups & Housemade", "Cold Brew", "Other"]
+    .map((groupName) => [
+      groupName,
+      (grouped.get(groupName) || []).sort((a, b) => getIngredientSortKey(a).localeCompare(getIngredientSortKey(b))),
+    ])
+    .filter(([, items]) => items.length);
+}
+
 function countChargeOverrides() {
   return Object.keys(chargeOverrides).filter((key) => toNumber(chargeOverrides[key])).length;
 }
@@ -796,7 +853,7 @@ function inferCategory(title) {
 }
 
 function getIngredientName(value, recipeTitle = "") {
-  const cleanedName = clean(value)
+  let cleanedName = clean(value)
     .replace(/^\d+(\.\d+)?\s*(gallons?|oz|cups?)\s+/i, "")
     .replace(/\s*=\s*.*$/, "")
     .replace(/\s*\([^)]*\)\s*$/g, "")
@@ -806,15 +863,93 @@ function getIngredientName(value, recipeTitle = "") {
 
   if (/^flavored schnapps$/i.test(cleanedName)) {
     const flavor = getRecipeFlavor(recipeTitle);
-    if (flavor) return `${flavor} Schnapps`;
+    if (flavor) cleanedName = `${flavor} Schnapps`;
   }
 
-  return cleanedName;
+  return normalizeIngredientAlias(cleanedName);
 }
 
 function getRecipeFlavor(recipeTitle) {
   const match = clean(recipeTitle).match(/blueberry|strawberry|raspberry|watermelon|peach/i);
   return match ? capitalize(match[0].toLowerCase()) : "";
+}
+
+function getProofMapping(ingredientId) {
+  return PROOF_MAPPINGS[ingredientId] || null;
+}
+
+function normalizeIngredientAlias(name) {
+  const normalized = clean(name).toLowerCase();
+
+  if (/^tito'?s(\s+vodka)?$/.test(normalized)) return "Tito's Vodka";
+  if (/^ket(t)?le one cucumber vodka$/.test(normalized)) return "Ketel One Cucumber Vodka";
+  if (/^jose cuervo(\s+silver)?$/.test(normalized)) return "Jose Cuervo Silver";
+  if (/^pomegrante schnapps$/.test(normalized)) return "Pomegranate Schnapps";
+  if (/^crown apple royal$/.test(normalized) || /^crown apple$/.test(normalized)) return "Crown Royal Apple";
+  if (/^jack daniels fire$/.test(normalized)) return "Jack Daniel's Fire";
+  if (/^jack daniels$/.test(normalized)) return "Jack Daniel's";
+  if (/^svedka blue raspberry$/.test(normalized)) return "Svedka Blue Raspberry Vodka";
+  if (/^gallon lemonade$/.test(normalized) || /^lemonade$/.test(normalized)) return "Lemonade";
+  if (/strawberry lemonade$/.test(normalized)) return "Strawberry Lemonade";
+  if (/^cranberry juice$/.test(normalized) || /^cranberry$/.test(normalized)) return "Cranberry Juice";
+  if (/^simple syrup$/.test(normalized)) return "Simple Syrup";
+  if (/^sour mix$/.test(normalized)) return "Sour Mix";
+  if (/^lime juice$/.test(normalized)) return "Lime Juice";
+  if (/^lemon juice$/.test(normalized)) return "Lemon Juice";
+  if (/^llords /.test(normalized)) return titleCaseIngredientName(name.replace(/^Llords/i, "Llord's"));
+
+  return titleCaseIngredientName(name);
+}
+
+function getIngredientGroup(name) {
+  const normalized = clean(name).toLowerCase();
+
+  if (["lemonade", "cranberry juice", "sweet tea", "strawberry lemonade"].includes(normalized)) return "Soda Machine";
+  if (normalized === "cold brew coffee") return "Cold Brew";
+  if (normalized === "blue Dot Juice".toLowerCase()) return "Syrups & Housemade";
+  if (normalized === "simple syrup" || normalized.includes("syrup") || normalized === "mint") return "Syrups & Housemade";
+  if (normalized.includes("juice") || normalized.includes("mix") || normalized.includes("blue dot")) return "Juices & Mixers";
+  if (
+    normalized.includes("schnapps") ||
+    normalized.includes("pucker") ||
+    normalized.includes("triple sec") ||
+    normalized.includes("creme de cacao") ||
+    normalized.includes("bitters")
+  ) {
+    return "Liqueurs & Schnapps";
+  }
+  if (
+    normalized.includes("vodka") ||
+    normalized.includes("gin") ||
+    normalized.includes("rum") ||
+    normalized.includes("tequila") ||
+    normalized.includes("whiskey") ||
+    normalized.includes("bourbon") ||
+    normalized.includes("crown royal") ||
+    normalized.includes("jose cuervo") ||
+    normalized.includes("bombay") ||
+    normalized.includes("captain morgan") ||
+    normalized.includes("jim beam") ||
+    normalized.includes("absolut citron") ||
+    normalized.includes("bulleit") ||
+    normalized.includes("jack daniel") ||
+    normalized === "kahlua"
+  ) {
+    return "Liquor";
+  }
+
+  return "Other";
+}
+
+function getIngredientSortKey(ingredient) {
+  const normalized = clean(ingredient.name).toLowerCase();
+  if (normalized === "kahlua") return "zzzz-kahlua";
+  if (normalized === "simple syrup") return "zzzz-simple-syrup";
+  return normalized;
+}
+
+function titleCaseIngredientName(name) {
+  return clean(name).replace(/\b([a-z])([a-z']*)/gi, (_, first, rest) => `${first.toUpperCase()}${rest.toLowerCase()}`);
 }
 
 function isMetricLabel(value) {
