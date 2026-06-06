@@ -5,6 +5,7 @@ const CHARGE_STORAGE_KEY = "cocktail-dashboard-charge-prices";
 const CUSTOM_RECIPE_STORAGE_KEY = "cocktail-dashboard-custom-recipes";
 const INACTIVE_RECIPE_STORAGE_KEY = "cocktail-dashboard-inactive-recipes";
 const EDITED_RECIPE_STORAGE_KEY = "cocktail-dashboard-edited-recipes";
+const DEFAULT_BATCH_LABEL = "12 gallon keg";
 const PROOF_MAPPINGS = {
   "apple-pucker": { vendor: "Proof", productName: "DeKuyper Sour Apple Schnapps Pucker 30 1L", bottleOz: 33.81 },
   "apple-schnapps": { vendor: "Proof", productName: "Llord's Apple Schnapps 1L", bottleOz: 33.81 },
@@ -239,7 +240,7 @@ function createRecipeCard(recipe, state) {
   const pricing = getRecipePricing(recipe);
   const card = cardTemplate.content.firstElementChild.cloneNode(true);
   card.querySelector("h2").textContent = recipe.title;
-  card.querySelector(".recipe-card__batch").textContent = recipe.batch || "Batch size not listed";
+  card.querySelector(".recipe-card__batch").textContent = formatBatchLabel(recipe.batch);
   card.querySelector(".spirit-pill").textContent = recipe.category;
   const actions = card.querySelector(".recipe-card__actions");
   actions.innerHTML = `
@@ -305,7 +306,7 @@ function renderPricing() {
     const override = chargeOverrides[recipe.id];
     const row = document.createElement("tr");
     row.innerHTML = `
-      <td><strong>${escapeHtml(recipe.title)}</strong><span class="table-note">${escapeHtml(recipe.batch || "")}</span></td>
+      <td><strong>${escapeHtml(recipe.title)}</strong></td>
       <td data-pricing-cell="cost">${money(pricing.costPerOz)}</td>
       <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override ?? "")}" placeholder="${formatNumber(recipe.defaultChargePerOz)}" aria-label="Charge per ounce for ${escapeHtml(recipe.title)}"></td>
       <td data-pricing-cell="profit">${money(pricing.profitPerOz)}</td>
@@ -477,7 +478,7 @@ function addCustomRecipe(event) {
   const recipe = {
     id: editingRecipeId || `custom-${Date.now()}-${slugify(title)}`,
     title,
-    batch: clean(document.querySelector("#new-recipe-batch").value),
+    batch: DEFAULT_BATCH_LABEL,
     category: clean(document.querySelector("#new-recipe-category").value) || "Other",
     defaultChargePerOz: toNumber(document.querySelector("#new-recipe-charge").value),
     ingredients: ingredientsForRecipe,
@@ -567,7 +568,6 @@ function startEditingRecipe(id) {
   recipeForm.reset();
   newIngredientRows.innerHTML = "";
   document.querySelector("#new-recipe-title").value = recipe.title;
-  document.querySelector("#new-recipe-batch").value = recipe.batch || "";
   document.querySelector("#new-recipe-category").value = recipe.category || "Other";
   document.querySelector("#new-recipe-charge").value = recipe.defaultChargePerOz || "";
 
@@ -1229,6 +1229,13 @@ function formatUpdatedAt(value) {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function formatBatchLabel(value) {
+  const cleaned = clean(value);
+  if (!cleaned) return DEFAULT_BATCH_LABEL;
+  if (/^12\s*gallons?$/i.test(cleaned) || /^12\s*gallon\s*keg$/i.test(cleaned)) return DEFAULT_BATCH_LABEL;
+  return cleaned;
 }
 
 function slugify(value) {

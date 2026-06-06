@@ -102,10 +102,6 @@ export default function DashboardPage() {
                 <input id="new-recipe-title" type="text" required placeholder="Example: Spicy Pineapple Margarita" />
               </label>
               <label>
-                <span>Batch size</span>
-                <input id="new-recipe-batch" type="text" placeholder="Example: 12 gallons" />
-              </label>
-              <label>
                 <span>Spirit</span>
                 <select id="new-recipe-category">
                   <option>Vodka</option>
