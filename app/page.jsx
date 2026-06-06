@@ -242,7 +242,7 @@ export default function DashboardPage() {
                         <th>Item</th>
                         <th>On hand</th>
                         <th>Par</th>
-                        <th>Order</th>
+                        <th>Order (case of 12)</th>
                         <th>Unit cost</th>
                         <th>Est. reorder cost</th>
                       </tr>

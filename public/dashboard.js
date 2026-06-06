@@ -169,6 +169,7 @@ let editedRecipes = loadEditedRecipes();
 let inventoryOnHandOverrides = loadInventoryOnHandOverrides();
 let inventoryParOverrides = loadInventoryParOverrides();
 let inventoryHistory = loadInventoryHistory();
+let inventoryParEditState = {};
 let editingRecipeId = null;
 let vendorSyncScope = "all";
 let vendorSyncMessage = "Press sync to check mapped vendors automatically. Vendors without a supported connection will report what is still needed.";
@@ -506,7 +507,7 @@ function renderIngredientSummary() {
 function renderInventory() {
   const visibleItems = getVisibleInventoryItems();
   const groupedItems = groupInventoryForDisplay(visibleItems);
-  const reorderItems = visibleItems.filter((item) => item.orderQuantity > 0);
+  const reorderItems = getInventoryReorderItems(visibleItems);
 
   renderInventorySummary(visibleItems, reorderItems);
   renderInventoryStockTable(groupedItems);
@@ -515,15 +516,15 @@ function renderInventory() {
 }
 
 function renderInventorySummary(visibleItems, reorderItems) {
-  const totalValue = sum(visibleItems.map((item) => item.totalValue));
-  const reorderCost = sum(reorderItems.map((item) => item.orderQuantity * item.unitCost));
-  const reorderUnits = sum(reorderItems.map((item) => item.orderQuantity));
+  const totalValue = sum(visibleItems.filter((item) => !item.excludeFromInventoryValue).map((item) => item.totalValue));
+  const reorderCost = sum(reorderItems.filter((item) => !item.excludeFromInventoryValue).map((item) => getInventoryRoundedOrderQuantity(item) * item.unitCost));
+  const reorderUnits = sum(reorderItems.map((item) => getInventoryRoundedOrderQuantity(item)));
   const latestSnapshot = inventoryHistory[0];
 
   inventorySummary.innerHTML = `
     <h2>Inventory Snapshot</h2>
     <div class="summary-line"><span>Tracked items</span><strong>${visibleItems.length}</strong></div>
-    <div class="summary-line"><span>Total on-hand value</span><strong>${money(totalValue)}</strong></div>
+    <div class="summary-line"><span>Current bottle inventory $</span><strong>${money(totalValue)}</strong></div>
     <div class="summary-line"><span>Items to reorder</span><strong>${reorderItems.length}</strong></div>
     <div class="summary-line"><span>Total units to order</span><strong>${formatNumber(reorderUnits)}</strong></div>
     <div class="summary-line"><span>Estimated reorder cost</span><strong>${money(reorderCost)}</strong></div>
@@ -543,11 +544,15 @@ function bindInventorySummaryEvents() {
 
 function renderInventoryStockTable(groupedItems) {
   inventoryTable.innerHTML = "";
+  const allVisibleItems = groupedItems.flatMap(([, items]) => items);
+  const totalValue = sum(allVisibleItems.filter((item) => !item.excludeFromInventoryValue).map((item) => item.totalValue));
 
   groupedItems.forEach(([groupName, items]) => {
     inventoryTable.append(createInventoryGroupRow(groupName));
     items.forEach((item) => inventoryTable.append(createInventoryRow(item, "stock")));
   });
+
+  inventoryTable.append(createInventoryTotalRow("Current bottle inventory total", money(totalValue)));
 }
 
 function renderInventoryOrderTable(reorderItems) {
@@ -562,6 +567,9 @@ function renderInventoryOrderTable(reorderItems) {
     inventoryOrderTable.append(createInventoryGroupRow(groupName));
     items.forEach((item) => inventoryOrderTable.append(createInventoryRow(item, "order")));
   });
+
+  const reorderCost = sum(reorderItems.filter((item) => !item.excludeFromInventoryValue).map((item) => getInventoryRoundedOrderQuantity(item) * item.unitCost));
+  inventoryOrderTable.append(createInventoryTotalRow("Estimated reorder total", money(reorderCost)));
 }
 
 function createInventoryGroupRow(groupName) {
@@ -571,16 +579,28 @@ function createInventoryGroupRow(groupName) {
   return row;
 }
 
+function createInventoryTotalRow(label, value) {
+  const row = document.createElement("tr");
+  row.className = "inventory-total-row";
+  row.innerHTML = `
+    <td colspan="5"><strong>${escapeHtml(label)}</strong></td>
+    <td><strong>${escapeHtml(value)}</strong></td>
+  `;
+  return row;
+}
+
 function createInventoryRow(item, mode) {
   const row = document.createElement("tr");
-  const costCell = mode === "order" ? money(item.orderQuantity * item.unitCost) : money(item.totalValue);
+  const orderQuantityForMode = mode === "order" ? getInventoryRoundedOrderQuantity(item) : item.orderQuantity;
+  const costCell = mode === "order" ? money(orderQuantityForMode * item.unitCost) : money(item.totalValue);
   row.className = mode === "order" && item.orderQuantity > 0 ? "inventory-row--order" : "";
   const inputMode = item.allowsDecimal ? "decimal" : "numeric";
+  const isParEditable = Boolean(inventoryParEditState[item.id]);
   row.innerHTML = `
     <td><strong>${escapeHtml(item.name)}</strong>${item.note ? `<span class="table-note">${escapeHtml(item.note)}</span>` : ""}</td>
     <td>${mode === "stock" ? `<input class="inventory-input" data-field="onHand" type="text" inputmode="${inputMode}" value="${escapeHtml(item.onHandDisplay)}" aria-label="On hand for ${escapeHtml(item.name)}">` : formatInventoryQuantity(item.onHandDisplay)}</td>
-    <td>${mode === "stock" ? `<input class="inventory-input" data-field="par" type="text" inputmode="${inputMode}" value="${escapeHtml(item.parDisplay)}" aria-label="Par for ${escapeHtml(item.name)}">` : formatInventoryQuantity(item.parDisplay)}</td>
-    <td data-cell="order" class="${item.orderQuantity > 0 ? "inventory-order-flag" : "muted"}">${formatInventoryQuantity(item.orderDisplay)}</td>
+    <td>${mode === "stock" ? `<div class="inventory-par-cell"><input class="inventory-input inventory-input--par ${isParEditable ? "is-editing" : "is-locked"}" data-field="par" type="text" inputmode="${inputMode}" value="${escapeHtml(item.parDisplay)}" aria-label="Par for ${escapeHtml(item.name)}" ${isParEditable ? "" : "readonly"}><button class="mini-button inventory-par-toggle" data-par-toggle="${escapeHtml(item.id)}" type="button">${isParEditable ? "Done" : "Edit"}</button></div>` : formatInventoryQuantity(item.parDisplay)}</td>
+    <td data-cell="order" class="${item.orderQuantity > 0 ? "inventory-order-flag" : "muted"}">${formatInventoryQuantity(mode === "order" ? orderQuantityForMode : item.orderDisplay)}</td>
     <td>${money(item.unitCost)}</td>
     <td data-cell="cost">${costCell}</td>
   `;
@@ -597,8 +617,15 @@ function createInventoryRow(item, mode) {
         renderInventoryPanels();
       });
     });
+    row.querySelector('[data-par-toggle]')?.addEventListener("click", () => toggleInventoryParEdit(item.id));
   }
   return row;
+}
+
+function getInventoryRoundedOrderQuantity(item) {
+  if (!item?.orderQuantity || item.orderQuantity <= 0) return 0;
+  if (item.group !== "Mixer Cabinet") return item.orderQuantity;
+  return Math.ceil(item.orderQuantity / 12) * 12;
 }
 
 function previewInventoryValue(id, field, value, row) {
@@ -634,9 +661,13 @@ function syncInventoryRowCells(row, item) {
 
 function renderInventoryPanels() {
   const visibleItems = getVisibleInventoryItems();
-  const reorderItems = visibleItems.filter((item) => item.orderQuantity > 0);
+  const reorderItems = getInventoryReorderItems(visibleItems);
   renderInventorySummary(visibleItems, reorderItems);
   renderInventoryOrderTable(reorderItems);
+}
+
+function getInventoryReorderItems(sourceItems) {
+  return sourceItems.filter((item) => item.orderQuantity > 0 && !item.excludeFromOrderList);
 }
 
 function getVisibleInventoryItems() {
@@ -701,6 +732,11 @@ function recalculateInventoryItem(item) {
   item.orderDisplay = item.orderQuantity > 0 ? String(item.orderQuantity) : "0";
 }
 
+function toggleInventoryParEdit(id) {
+  inventoryParEditState[id] = !inventoryParEditState[id];
+  renderInventory();
+}
+
 function saveInventorySnapshot() {
   const snapshot = {
     id: `inventory-${Date.now()}`,
@@ -710,7 +746,7 @@ function saveInventorySnapshot() {
 
   inventoryHistory = [snapshot, ...inventoryHistory];
   saveInventoryHistory();
-  renderInventorySummary(getVisibleInventoryItems(), getVisibleInventoryItems().filter((item) => item.orderQuantity > 0));
+  renderInventorySummary(getVisibleInventoryItems(), getInventoryReorderItems(getVisibleInventoryItems()));
   renderInventoryHistory();
 }
 
@@ -827,7 +863,7 @@ function deleteInventorySnapshot(snapshotId) {
   inventoryHistory = inventoryHistory.filter((snapshot) => snapshot.id !== snapshotId);
   saveInventoryHistory();
   renderInventoryHistory();
-  renderInventorySummary(getVisibleInventoryItems(), getVisibleInventoryItems().filter((item) => item.orderQuantity > 0));
+  renderInventorySummary(getVisibleInventoryItems(), getInventoryReorderItems(getVisibleInventoryItems()));
 }
 
 function restoreInventorySnapshot(snapshotId) {
@@ -1343,7 +1379,8 @@ function getCalculatedMetrics(recipe, totals, pricing) {
 }
 
 function getIngredientCost(ingredient) {
-  const override = priceOverrides[ingredient.id];
+  const resolvedId = getResolvedIngredientId(ingredient);
+  const override = priceOverrides[resolvedId];
   const bottleOz = toNumber(override?.bottleOz);
   const bottlePrice = toNumber(override?.bottlePrice);
 
@@ -1354,9 +1391,9 @@ function getIngredientCost(ingredient) {
     };
   }
 
-  const catalogIngredient = ingredients.find((item) => item.id === ingredient.id);
+  const catalogIngredient = ingredients.find((item) => item.id === resolvedId);
   const catalogUnitCost = catalogIngredient ? getCatalogUnitCost(catalogIngredient) : 0;
-  if (catalogUnitCost && ingredient.oz && !ingredient.cost) {
+  if (catalogUnitCost && ingredient.oz) {
     return {
       cost: ingredient.oz * catalogUnitCost,
       source: "catalog",
@@ -1375,16 +1412,23 @@ function getIngredientAbvFraction(ingredient) {
 }
 
 function getIngredientAbvPercent(ingredient) {
-  if (!ingredient?.id) return 0;
-  if (Object.hasOwn(INGREDIENT_ABV_PERCENT, ingredient.id)) {
-    return INGREDIENT_ABV_PERCENT[ingredient.id];
+  const resolvedId = getResolvedIngredientId(ingredient);
+  if (!resolvedId) return 0;
+  if (Object.hasOwn(INGREDIENT_ABV_PERCENT, resolvedId)) {
+    return INGREDIENT_ABV_PERCENT[resolvedId];
   }
 
-  const mappedProduct = getVendorMapping(ingredient.id);
+  const mappedProduct = getVendorMapping(resolvedId);
   const parsedProofAbv = getAbvPercentFromProductName(mappedProduct?.productName);
   if (parsedProofAbv) return parsedProofAbv;
 
   return inferFallbackAbvPercent(ingredient.name);
+}
+
+function getResolvedIngredientId(ingredient) {
+  const resolvedName = normalizeIngredientAlias(clean(ingredient?.name));
+  if (!resolvedName) return clean(ingredient?.id);
+  return slugify(resolvedName);
 }
 
 function getAbvPercentFromProductName(productName) {
@@ -1547,13 +1591,45 @@ function parseInventory(rows) {
       unitCost,
       parDisplay,
       note,
+      excludeFromOrderList: normalizedName === "Sweet and Sour",
+      excludeFromInventoryValue: normalizedName === "Non Alcoholic Beer",
     };
 
     recalculateInventoryItem(item);
     items.push(item);
   });
 
+  ensureInventoryPlaceholder(items, {
+    name: "Non Alcoholic Beer",
+    group: "Other",
+    unitCost: 0,
+    note: "Tracked separately",
+    excludeFromInventoryValue: true,
+  });
+
   return items;
+}
+
+function ensureInventoryPlaceholder(items, config) {
+  const id = slugify(config.name);
+  if (items.some((item) => item.id === id)) return;
+
+  const item = {
+    id,
+    name: config.name,
+    group: config.group,
+    allowsDecimal: false,
+    sourceSection: config.group,
+    onHandDisplay: inventoryOnHandOverrides[id] ?? "0",
+    unitCost: config.unitCost || 0,
+    parDisplay: inventoryParOverrides[id] ?? "0",
+    note: config.note || "",
+    excludeFromOrderList: false,
+    excludeFromInventoryValue: Boolean(config.excludeFromInventoryValue),
+  };
+
+  recalculateInventoryItem(item);
+  items.push(item);
 }
 
 function isInventorySectionRow(first, last) {
@@ -1584,7 +1660,7 @@ function groupInventoryForDisplay(sourceItems) {
     grouped.get(item.group).push(item);
   });
 
-  return ["Liquor Cabinet", "Mixer Cabinet"]
+  return ["Liquor Cabinet", "Mixer Cabinet", "Other"]
     .map((groupName) => [
       groupName,
       (grouped.get(groupName) || []).sort((a, b) => getInventorySortKey(a).localeCompare(getInventorySortKey(b))),
@@ -1597,6 +1673,7 @@ function getInventoryGroup(name, sourceSection) {
   if (sourceSection === "Bottle Service Karaoke Cooler") return "Bottle Service";
   if (sourceSection === "Bubbly in patio cooler") return "Bubbly";
   if (normalized === "kahlua") return "Mixer Cabinet";
+  if (normalized === "sweet and sour" || normalized === "non alcoholic beer") return "Other";
 
   const ingredientGroup = getIngredientGroup(name);
   if (ingredientGroup === "Liquor") return "Liquor Cabinet";
@@ -1636,7 +1713,12 @@ function getRecipeFlavor(recipeTitle) {
 }
 
 function getVendorMapping(ingredientId) {
-  return PROOF_MAPPINGS[ingredientId] || OHLQ_MAPPINGS[ingredientId] || null;
+  if (PROOF_MAPPINGS[ingredientId] || OHLQ_MAPPINGS[ingredientId]) {
+    return PROOF_MAPPINGS[ingredientId] || OHLQ_MAPPINGS[ingredientId] || null;
+  }
+
+  const fallbackId = slugify(normalizeIngredientAlias(clean(String(ingredientId).replace(/-/g, " "))));
+  return PROOF_MAPPINGS[fallbackId] || OHLQ_MAPPINGS[fallbackId] || null;
 }
 
 function normalizeIngredientAlias(name) {
