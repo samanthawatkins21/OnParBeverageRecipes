@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function DashboardPage() {
+  const [isReady, setIsReady] = useState(false);
+
   useEffect(() => {
+    setIsReady(true);
+
     const existingScript = document.querySelector('script[data-dashboard-script="true"]');
     if (existingScript) existingScript.remove();
 
@@ -18,6 +22,24 @@ export default function DashboardPage() {
     };
   }, []);
 
+  if (!isReady) {
+    return (
+      <div className="shell">
+        <header className="topbar">
+          <div>
+            <p className="eyebrow">Batch cocktail costing</p>
+            <h1>Cocktail Recipe Dashboard</h1>
+          </div>
+        </header>
+        <main>
+          <section className="panel is-active">
+            <div className="empty-state">Loading dashboard...</div>
+          </section>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="shell">
       <header className="topbar">
@@ -27,9 +49,10 @@ export default function DashboardPage() {
         </div>
         <div className="top-actions" aria-label="Dashboard controls">
           <button className="tab-button is-active" data-tab="recipes" type="button">Recipes</button>
-          <button className="tab-button" data-tab="pricing" type="button">Pricing</button>
+          <button className="tab-button" data-tab="pricing" type="button">Tap Wall Pricing</button>
+          <button className="tab-button" data-tab="ingredients" type="button">Cocktail Ingredients</button>
+          <button className="tab-button" data-tab="inventory" type="button">Inventory</button>
           <button className="tab-button" data-tab="add" type="button">Add Recipe</button>
-          <button className="tab-button" data-tab="ingredients" type="button">Ingredients</button>
           <button className="tab-button" data-tab="old" type="button">Old Recipes</button>
         </div>
       </header>
@@ -129,7 +152,7 @@ export default function DashboardPage() {
                   <thead>
                     <tr>
                       <th>Ingredient</th>
-                      <th>$ in recipe</th>
+                      <th>Bottles / gallons</th>
                       <th>Oz in recipe</th>
                       <th></th>
                     </tr>
@@ -166,6 +189,78 @@ export default function DashboardPage() {
                 </thead>
                 <tbody id="ingredient-table"></tbody>
               </table>
+            </div>
+          </div>
+        </section>
+
+        <section className="panel" id="inventory-panel" aria-labelledby="inventory-tab">
+          <div className="toolbar">
+            <label className="search-field">
+              <span>Find inventory item</span>
+              <input id="inventory-search" type="search" placeholder="Search liquor, mixers, reorder items..." />
+            </label>
+          </div>
+
+          <div className="inventory-layout">
+            <aside className="inventory-summary" id="inventory-summary"></aside>
+            <div className="inventory-sections">
+              <section className="inventory-block">
+                <div className="inventory-block__header">
+                  <div>
+                    <p className="eyebrow">Snapshot</p>
+                    <h2>Current Inventory</h2>
+                  </div>
+                </div>
+                <div className="inventory-table-wrap">
+                  <table className="inventory-table">
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th>On hand</th>
+                        <th>Par</th>
+                        <th>Order</th>
+                        <th>Unit cost</th>
+                        <th>Total value</th>
+                      </tr>
+                    </thead>
+                    <tbody id="inventory-table"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section className="inventory-block">
+                <div className="inventory-block__header">
+                  <div>
+                    <p className="eyebrow">Reorder List</p>
+                    <h2>Needs To Be Ordered</h2>
+                  </div>
+                </div>
+                <div className="inventory-table-wrap">
+                  <table className="inventory-table inventory-table--orders">
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th>On hand</th>
+                        <th>Par</th>
+                        <th>Order</th>
+                        <th>Unit cost</th>
+                        <th>Est. reorder cost</th>
+                      </tr>
+                    </thead>
+                    <tbody id="inventory-order-table"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section className="inventory-block">
+                <div className="inventory-block__header">
+                  <div>
+                    <p className="eyebrow">Weekly History</p>
+                    <h2>Saved Inventory Snapshots</h2>
+                  </div>
+                </div>
+                <div className="inventory-history-list" id="inventory-history-list"></div>
+              </section>
             </div>
           </div>
         </section>

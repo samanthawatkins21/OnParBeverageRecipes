@@ -354,7 +354,8 @@ td {
 }
 
 .ingredient-layout,
-.pricing-layout {
+.pricing-layout,
+.inventory-layout {
   display: grid;
   grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
   gap: 16px;
@@ -362,7 +363,8 @@ td {
 }
 
 .ingredient-summary,
-.pricing-summary {
+.pricing-summary,
+.inventory-summary {
   position: sticky;
   top: 16px;
   border: 1px solid rgba(24, 33, 31, 0.12);
@@ -371,7 +373,8 @@ td {
 }
 
 .ingredient-summary h2,
-.pricing-summary h2 {
+.pricing-summary h2,
+.inventory-summary h2 {
   margin: 0 0 14px;
   font-size: 1.45rem;
 }
@@ -436,10 +439,134 @@ td {
 }
 
 .ingredient-table-wrap,
-.pricing-table-wrap {
+.pricing-table-wrap,
+.inventory-table-wrap {
   overflow-x: auto;
   border: 1px solid rgba(24, 33, 31, 0.12);
   background: var(--paper-strong);
+}
+
+.inventory-sections {
+  display: grid;
+  gap: 16px;
+}
+
+.inventory-block {
+  border: 1px solid rgba(24, 33, 31, 0.12);
+  background: rgba(255, 253, 247, 0.94);
+}
+
+.inventory-actions-panel .primary-button {
+  width: 100%;
+}
+
+.inventory-block__header {
+  padding: 18px 18px 0;
+}
+
+.inventory-block__header h2 {
+  margin: 0;
+  font-family: "Fraunces", serif;
+  font-size: 1.45rem;
+}
+
+.inventory-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.inventory-table th:nth-child(1) {
+  width: 28%;
+}
+
+.inventory-table th:nth-child(2),
+.inventory-table th:nth-child(3),
+.inventory-table th:nth-child(4),
+.inventory-table th:nth-child(5),
+.inventory-table th:nth-child(6) {
+  width: 14.4%;
+}
+
+.inventory-input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: var(--paper-strong);
+  padding: 0 9px;
+}
+
+.inventory-group-row td {
+  padding: 12px;
+  color: var(--juniper-dark);
+  background: rgba(31, 95, 84, 0.08);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.inventory-order-flag {
+  color: var(--tomato);
+  font-weight: 800;
+}
+
+.inventory-history-list {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.inventory-history-card {
+  border: 1px solid rgba(24, 33, 31, 0.12);
+  background: var(--paper-strong);
+}
+
+.inventory-history-card summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.inventory-history-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.inventory-history-card summary strong,
+.inventory-history-card summary span {
+  display: block;
+}
+
+.inventory-history-heading {
+  display: grid;
+  gap: 2px;
+}
+
+.inventory-history-card summary span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.inventory-history-stats {
+  text-align: right;
+}
+
+.inventory-history-card__body {
+  border-top: 1px solid rgba(24, 33, 31, 0.1);
+  padding: 16px;
+}
+
+.inventory-history-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
 }
 
 .ingredient-table th:nth-child(1) {
@@ -562,12 +689,12 @@ td {
 }
 
 .new-ingredient-table th:nth-child(1) {
-  width: 48%;
+  width: 42%;
 }
 
 .new-ingredient-table th:nth-child(2),
 .new-ingredient-table th:nth-child(3) {
-  width: 22%;
+  width: 24%;
 }
 
 .new-ingredient-table th:nth-child(4) {
@@ -577,6 +704,11 @@ td {
 .new-ingredient-table input {
   min-height: 38px;
   padding: 0 9px;
+}
+
+.new-ingredient-table input[readonly] {
+  background: rgba(31, 95, 84, 0.08);
+  cursor: default;
 }
 
 .primary-liquor-row td {
@@ -642,12 +774,14 @@ td {
   }
 
   .ingredient-layout,
-  .pricing-layout {
+  .pricing-layout,
+  .inventory-layout {
     grid-template-columns: 1fr;
   }
 
   .ingredient-summary,
-  .pricing-summary {
+  .pricing-summary,
+  .inventory-summary {
     position: static;
   }
 
@@ -717,7 +851,8 @@ td {
     min-width: 820px;
   }
 
-  .pricing-table {
+  .pricing-table,
+  .inventory-table {
     min-width: 860px;
   }
 }

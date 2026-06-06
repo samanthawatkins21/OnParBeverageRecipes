@@ -1,10 +1,43 @@
 const CSV_PATH = "./data/cocktail-recipes.csv";
 const NEW_COCKTAILS_CSV_PATH = "./data/new-cocktails.csv";
+const INVENTORY_CSV_PATH = "./data/inventory-2026-06-01.csv";
 const STORAGE_KEY = "cocktail-dashboard-ingredient-prices";
 const CHARGE_STORAGE_KEY = "cocktail-dashboard-charge-prices";
 const CUSTOM_RECIPE_STORAGE_KEY = "cocktail-dashboard-custom-recipes";
 const INACTIVE_RECIPE_STORAGE_KEY = "cocktail-dashboard-inactive-recipes";
 const EDITED_RECIPE_STORAGE_KEY = "cocktail-dashboard-edited-recipes";
+const INVENTORY_ON_HAND_STORAGE_KEY = "cocktail-dashboard-inventory-on-hand";
+const INVENTORY_PAR_STORAGE_KEY = "cocktail-dashboard-inventory-par";
+const INVENTORY_HISTORY_STORAGE_KEY = "cocktail-dashboard-inventory-history";
+const INVENTORY_CABINET_ORDER = [
+  "Bulleit Bourbon",
+  "Crown Royal",
+  "Svedka Blue Raspberry Vodka",
+  "Jose Cuervo Silver",
+  "Tito's",
+  "Ketel One Cucumber Vodka",
+  "Absolut Citron",
+  "Crown Apple",
+  "Captain Morgan",
+  "Bombay Sapphire",
+  "Jack Daniel's",
+  "Blue Rasp Powder",
+  "Bitters",
+  "Lemon Juice",
+  "Raspberry Schnapps",
+  "Pomegranate Schnapps",
+  "Strawberry Schnapps",
+  "Triple Sec",
+  "Peach Schnapps",
+  "Blueberry Schnapps",
+  "Lime Juice",
+  "Watermelon Schnapps",
+  "Apple Schnapps",
+  "Creme de Cacao",
+  "Kahlua",
+  "Cold Brew",
+  "Sweet and Sour",
+];
 const DEFAULT_BATCH_LABEL = "12 gallon keg";
 const PROOF_MAPPINGS = {
   "apple-pucker": { vendor: "Proof", productName: "DeKuyper Sour Apple Schnapps Pucker 30 1L", bottleOz: 33.81 },
@@ -25,7 +58,7 @@ const PROOF_MAPPINGS = {
 const OHLQ_MAPPINGS = {
   "absolut-citron": { vendor: "OHLQ", productName: "Absolut Citron Vodka 1.75L", bottleOz: 59.17 },
   "bombay-sapphire": { vendor: "OHLQ", productName: "Bombay Sapphire Gin 1.75L", bottleOz: 59.17 },
-  bulleit: { vendor: "OHLQ", productName: "Bulleit Bourbon 1.75L", bottleOz: 59.17 },
+  "bulleit-bourbon": { vendor: "OHLQ", productName: "Bulleit Bourbon 1.75L", bottleOz: 59.17 },
   "captain-morgan": { vendor: "OHLQ", productName: "Captain Morgan Original Spiced Rum 1.75L", bottleOz: 59.17 },
   "crown-apple": { vendor: "OHLQ", productName: "Crown Royal Regal Apple 1.75L", bottleOz: 59.17 },
   "crown-royal": { vendor: "OHLQ", productName: "Crown Royal Canadian Whisky 1.75L", bottleOz: 59.17 },
@@ -37,6 +70,33 @@ const OHLQ_MAPPINGS = {
   "ketel-one-cucumber-vodka": { vendor: "OHLQ", productName: "Ketel One Botanical Cucumber & Mint 1L", bottleOz: 33.81 },
   "svedka-blue-raspberry-vodka": { vendor: "OHLQ", productName: "Svedka Blue Raspberry Vodka 750mL", bottleOz: 25.36 },
   "tito-s": { vendor: "OHLQ", productName: "Tito's Handmade Vodka 1.75L", bottleOz: 59.17 },
+};
+const INGREDIENT_ABV_PERCENT = {
+  "absolut-citron": 40,
+  "apple-pucker": 15,
+  "apple-schnapps": 15,
+  bitters: 44.7,
+  "blueberry-schnapps": 15,
+  "bombay-sapphire": 47,
+  "bulleit-bourbon": 45,
+  "captain-morgan": 35,
+  "creme-de-cacao": 15,
+  "crown-apple": 35,
+  "crown-royal": 40,
+  "jack-daniel-s": 40,
+  "jack-daniel-s-fire": 35,
+  "jim-beam": 40,
+  "jose-cuervo-silver": 40,
+  kahlua: 20,
+  "ketel-one-cucumber-vodka": 30,
+  "peach-schnapps": 15,
+  "pomegranate-schnapps": 15,
+  "raspberry-schnapps": 16.5,
+  "strawberry-schnapps": 15,
+  "svedka-blue-raspberry-vodka": 35,
+  "tito-s": 40,
+  "triple-sec": 15,
+  "watermelon-schnapps": 15,
 };
 const MENU_ORDER = [
   ["GIN & JUICE (BOMBAY)", "Ginny from the Block (Gin)"],
@@ -83,6 +143,11 @@ const pricingSummary = document.querySelector("#pricing-summary");
 const ingredientSearch = document.querySelector("#ingredient-search");
 const ingredientTable = document.querySelector("#ingredient-table");
 const ingredientSummary = document.querySelector("#ingredient-summary");
+const inventorySearch = document.querySelector("#inventory-search");
+const inventoryTable = document.querySelector("#inventory-table");
+const inventoryOrderTable = document.querySelector("#inventory-order-table");
+const inventorySummary = document.querySelector("#inventory-summary");
+const inventoryHistoryList = document.querySelector("#inventory-history-list");
 const clearPricesButton = document.querySelector("#clear-prices");
 const clearChargesButton = document.querySelector("#clear-charges");
 const recipeForm = document.querySelector("#recipe-form");
@@ -95,11 +160,15 @@ const cardTemplate = document.querySelector("#recipe-card-template");
 
 let recipes = [];
 let ingredients = [];
+let inventoryItems = [];
 let priceOverrides = loadOverrides();
 let chargeOverrides = loadChargeOverrides();
 let customRecipes = loadCustomRecipes();
 let inactiveRecipeIds = loadInactiveRecipeIds();
 let editedRecipes = loadEditedRecipes();
+let inventoryOnHandOverrides = loadInventoryOnHandOverrides();
+let inventoryParOverrides = loadInventoryParOverrides();
+let inventoryHistory = loadInventoryHistory();
 let editingRecipeId = null;
 let vendorSyncScope = "all";
 let vendorSyncMessage = "Press sync to check mapped vendors automatically. Vendors without a supported connection will report what is still needed.";
@@ -108,9 +177,10 @@ let vendorSyncRunning = false;
 init();
 
 async function init() {
-  const [csv, newCocktailsCsv] = await Promise.all([
+  const [csv, newCocktailsCsv, inventoryCsv] = await Promise.all([
     fetchCsv(CSV_PATH),
     fetchCsv(NEW_COCKTAILS_CSV_PATH),
+    fetchCsv(INVENTORY_CSV_PATH),
   ]);
 
   recipes = [
@@ -119,6 +189,7 @@ async function init() {
     ...customRecipes,
   ].map(applyRecipeEdits);
   ingredients = buildIngredientCatalog(getActiveRecipes());
+  inventoryItems = parseInventory(parseCsv(inventoryCsv));
   hydrateCategoryFilter(recipes);
   bindEvents();
   addIngredientRow();
@@ -137,6 +208,7 @@ function bindEvents() {
   oldSearch.addEventListener("input", renderOldRecipes);
   pricingSearch.addEventListener("input", renderPricing);
   ingredientSearch.addEventListener("input", renderIngredients);
+  inventorySearch.addEventListener("input", renderInventory);
   recipeForm.addEventListener("submit", addCustomRecipe);
   addIngredientRowButton.addEventListener("click", addIngredientRow);
   cancelEditButton.addEventListener("click", resetRecipeForm);
@@ -168,6 +240,7 @@ function render() {
   renderRecipes();
   renderPricing();
   renderIngredients();
+  renderInventory();
   renderOldRecipes();
 }
 
@@ -263,6 +336,7 @@ function createRecipeCard(recipe, state) {
   card.querySelector(".recipe-card__numbers").innerHTML = [
     ["Total cost", money(totals.cost)],
     ["Total oz", formatNumber(totals.oz)],
+    ["ABV", `${formatNumber(totals.abvPercent)}%`],
     ["Profit margin", `${formatNumber(pricing.margin)}%`],
   ]
     .map(([label, value]) => `<div class="recipe-number"><strong>${value}</strong><span>${label}</span></div>`)
@@ -429,6 +503,360 @@ function renderIngredientSummary() {
   bindIngredientSummaryEvents();
 }
 
+function renderInventory() {
+  const visibleItems = getVisibleInventoryItems();
+  const groupedItems = groupInventoryForDisplay(visibleItems);
+  const reorderItems = visibleItems.filter((item) => item.orderQuantity > 0);
+
+  renderInventorySummary(visibleItems, reorderItems);
+  renderInventoryStockTable(groupedItems);
+  renderInventoryOrderTable(reorderItems);
+  renderInventoryHistory();
+}
+
+function renderInventorySummary(visibleItems, reorderItems) {
+  const totalValue = sum(visibleItems.map((item) => item.totalValue));
+  const reorderCost = sum(reorderItems.map((item) => item.orderQuantity * item.unitCost));
+  const reorderUnits = sum(reorderItems.map((item) => item.orderQuantity));
+  const latestSnapshot = inventoryHistory[0];
+
+  inventorySummary.innerHTML = `
+    <h2>Inventory Snapshot</h2>
+    <div class="summary-line"><span>Tracked items</span><strong>${visibleItems.length}</strong></div>
+    <div class="summary-line"><span>Total on-hand value</span><strong>${money(totalValue)}</strong></div>
+    <div class="summary-line"><span>Items to reorder</span><strong>${reorderItems.length}</strong></div>
+    <div class="summary-line"><span>Total units to order</span><strong>${formatNumber(reorderUnits)}</strong></div>
+    <div class="summary-line"><span>Estimated reorder cost</span><strong>${money(reorderCost)}</strong></div>
+    <div class="sync-panel inventory-actions-panel">
+      <button class="primary-button" id="save-inventory-snapshot" type="button">Save Weekly Snapshot</button>
+      <p class="sync-copy">This saves the current inventory in this browser so you can look back week by week.</p>
+      <p class="sync-status">${latestSnapshot ? `Last saved ${escapeHtml(formatUpdatedAt(latestSnapshot.savedAt))}` : "No weekly snapshots saved yet."}</p>
+    </div>
+  `;
+
+  bindInventorySummaryEvents();
+}
+
+function bindInventorySummaryEvents() {
+  document.querySelector("#save-inventory-snapshot")?.addEventListener("click", saveInventorySnapshot);
+}
+
+function renderInventoryStockTable(groupedItems) {
+  inventoryTable.innerHTML = "";
+
+  groupedItems.forEach(([groupName, items]) => {
+    inventoryTable.append(createInventoryGroupRow(groupName));
+    items.forEach((item) => inventoryTable.append(createInventoryRow(item, "stock")));
+  });
+}
+
+function renderInventoryOrderTable(reorderItems) {
+  inventoryOrderTable.innerHTML = "";
+
+  if (!reorderItems.length) {
+    inventoryOrderTable.innerHTML = `<tr><td colspan="6" class="muted">Nothing needs to be ordered right now.</td></tr>`;
+    return;
+  }
+
+  groupInventoryForDisplay(reorderItems).forEach(([groupName, items]) => {
+    inventoryOrderTable.append(createInventoryGroupRow(groupName));
+    items.forEach((item) => inventoryOrderTable.append(createInventoryRow(item, "order")));
+  });
+}
+
+function createInventoryGroupRow(groupName) {
+  const row = document.createElement("tr");
+  row.className = "inventory-group-row";
+  row.innerHTML = `<td colspan="6">${escapeHtml(groupName)}</td>`;
+  return row;
+}
+
+function createInventoryRow(item, mode) {
+  const row = document.createElement("tr");
+  const costCell = mode === "order" ? money(item.orderQuantity * item.unitCost) : money(item.totalValue);
+  row.className = mode === "order" && item.orderQuantity > 0 ? "inventory-row--order" : "";
+  const inputMode = item.allowsDecimal ? "decimal" : "numeric";
+  row.innerHTML = `
+    <td><strong>${escapeHtml(item.name)}</strong>${item.note ? `<span class="table-note">${escapeHtml(item.note)}</span>` : ""}</td>
+    <td>${mode === "stock" ? `<input class="inventory-input" data-field="onHand" type="text" inputmode="${inputMode}" value="${escapeHtml(item.onHandDisplay)}" aria-label="On hand for ${escapeHtml(item.name)}">` : formatInventoryQuantity(item.onHandDisplay)}</td>
+    <td>${mode === "stock" ? `<input class="inventory-input" data-field="par" type="text" inputmode="${inputMode}" value="${escapeHtml(item.parDisplay)}" aria-label="Par for ${escapeHtml(item.name)}">` : formatInventoryQuantity(item.parDisplay)}</td>
+    <td data-cell="order" class="${item.orderQuantity > 0 ? "inventory-order-flag" : "muted"}">${formatInventoryQuantity(item.orderDisplay)}</td>
+    <td>${money(item.unitCost)}</td>
+    <td data-cell="cost">${costCell}</td>
+  `;
+  if (mode === "stock") {
+    row.querySelectorAll("input").forEach((input) => {
+      const field = input.dataset.field;
+      input.addEventListener("focus", () => input.select());
+      input.addEventListener("input", () => previewInventoryValue(item.id, field, input.value, row));
+      input.addEventListener("change", () => commitInventoryValue(item.id, field, input.value));
+      input.addEventListener("blur", () => {
+        commitInventoryValue(item.id, field, input.value);
+        input.value = getInventoryDisplayValue(findInventoryItem(item.id), field);
+        syncInventoryRowCells(row, findInventoryItem(item.id));
+        renderInventoryPanels();
+      });
+    });
+  }
+  return row;
+}
+
+function previewInventoryValue(id, field, value, row) {
+  const item = findInventoryItem(id);
+  if (!item) return;
+
+  setInventoryItemDisplayValue(item, field, value);
+  syncInventoryRowCells(row, item);
+  persistInventoryField(id, field, value);
+  renderInventoryPanels();
+}
+
+function commitInventoryValue(id, field, value) {
+  const item = findInventoryItem(id);
+  if (!item) return;
+
+  const normalized = normalizeInventoryInputValue(value, item.allowsDecimal);
+  setInventoryItemDisplayValue(item, field, normalized);
+  persistInventoryField(id, field, normalized);
+}
+
+function syncInventoryRowCells(row, item) {
+  const orderCell = row.querySelector('[data-cell="order"]');
+  const costCell = row.querySelector('[data-cell="cost"]');
+  if (orderCell) {
+    orderCell.textContent = formatInventoryQuantity(item.orderDisplay);
+    orderCell.className = item.orderQuantity > 0 ? "inventory-order-flag" : "muted";
+  }
+  if (costCell) {
+    costCell.textContent = money(item.totalValue);
+  }
+}
+
+function renderInventoryPanels() {
+  const visibleItems = getVisibleInventoryItems();
+  const reorderItems = visibleItems.filter((item) => item.orderQuantity > 0);
+  renderInventorySummary(visibleItems, reorderItems);
+  renderInventoryOrderTable(reorderItems);
+}
+
+function getVisibleInventoryItems() {
+  const searchTerm = inventorySearch.value.trim().toLowerCase();
+  return inventoryItems.filter((item) => {
+    const haystack = `${item.name} ${item.group} ${item.sourceSection}`.toLowerCase();
+    return haystack.includes(searchTerm);
+  });
+}
+
+function findInventoryItem(id) {
+  return inventoryItems.find((item) => item.id === id) || null;
+}
+
+function setInventoryItemDisplayValue(item, field, value) {
+  if (field === "par") {
+    item.parDisplay = clean(value);
+  } else {
+    item.onHandDisplay = clean(value);
+  }
+  recalculateInventoryItem(item);
+}
+
+function getInventoryDisplayValue(item, field) {
+  if (!item) return "";
+  return field === "par" ? item.parDisplay : item.onHandDisplay;
+}
+
+function persistInventoryField(id, field, value) {
+  if (field === "par") {
+    persistInventoryOverride(inventoryParOverrides, saveInventoryParOverrides, id, value);
+    return;
+  }
+  persistInventoryOverride(inventoryOnHandOverrides, saveInventoryOnHandOverrides, id, value);
+}
+
+function persistInventoryOverride(store, saveFn, id, value) {
+  const normalized = clean(value);
+  if (!normalized) {
+    delete store[id];
+  } else {
+    store[id] = normalized;
+  }
+  saveFn();
+}
+
+function normalizeInventoryInputValue(value, allowsDecimal) {
+  const normalized = clean(value);
+  if (!normalized) return "";
+
+  const number = toNumber(normalized);
+  if (!Number.isFinite(number)) return "";
+  if (allowsDecimal) return String(number);
+  return String(Math.round(number));
+}
+
+function recalculateInventoryItem(item) {
+  item.onHand = toNumber(item.onHandDisplay);
+  item.par = toNumber(item.parDisplay);
+  item.totalValue = item.onHand * item.unitCost;
+  item.orderQuantity = item.par > item.onHand ? item.par - item.onHand : 0;
+  item.orderDisplay = item.orderQuantity > 0 ? String(item.orderQuantity) : "0";
+}
+
+function saveInventorySnapshot() {
+  const snapshot = {
+    id: `inventory-${Date.now()}`,
+    savedAt: new Date().toISOString(),
+    items: getInventorySnapshotItems(),
+  };
+
+  inventoryHistory = [snapshot, ...inventoryHistory];
+  saveInventoryHistory();
+  renderInventorySummary(getVisibleInventoryItems(), getVisibleInventoryItems().filter((item) => item.orderQuantity > 0));
+  renderInventoryHistory();
+}
+
+function getInventorySnapshotItems() {
+  return groupInventoryForDisplay([...inventoryItems]).flatMap(([, items]) => items).map((item) => ({
+    name: item.name,
+    group: item.group,
+    onHandDisplay: item.onHandDisplay,
+    parDisplay: item.parDisplay,
+    orderDisplay: item.orderDisplay,
+    unitCost: item.unitCost,
+    totalValue: item.totalValue,
+    note: item.note,
+  }));
+}
+
+function renderInventoryHistory() {
+  if (!inventoryHistoryList) return;
+
+  if (!inventoryHistory.length) {
+    inventoryHistoryList.innerHTML = `<div class="empty-state">Save a weekly snapshot here each Monday and your past inventory counts will stay available on this computer.</div>`;
+    return;
+  }
+
+  inventoryHistoryList.innerHTML = inventoryHistory.map((snapshot, index) => {
+    const reorderItems = snapshot.items.filter((item) => toNumber(item.orderDisplay) > 0);
+    const totalValue = sum(snapshot.items.map((item) => item.totalValue));
+    const reorderCost = sum(reorderItems.map((item) => toNumber(item.orderDisplay) * item.unitCost));
+
+    return `
+      <details class="inventory-history-card"${index === 0 ? " open" : ""}>
+        <summary>
+          <div class="inventory-history-heading">
+            <strong>${escapeHtml(formatInventorySnapshotLabel(snapshot.savedAt))}</strong>
+            <span>Saved ${escapeHtml(formatUpdatedAt(snapshot.savedAt))}</span>
+            <span>${snapshot.items.length} items saved</span>
+          </div>
+          <div class="inventory-history-stats">
+            <span>${money(totalValue)} on hand</span>
+            <span>${money(reorderCost)} to reorder</span>
+          </div>
+        </summary>
+        <div class="inventory-history-card__body">
+          <div class="inventory-history-actions">
+            <button class="ghost-button inventory-history-restore" data-snapshot-id="${escapeHtml(snapshot.id)}" type="button">Recall Snapshot</button>
+            <button class="ghost-button inventory-history-delete" data-snapshot-id="${escapeHtml(snapshot.id)}" type="button">Delete snapshot</button>
+          </div>
+          <div class="inventory-table-wrap">
+            <table class="inventory-table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>On hand</th>
+                  <th>Par</th>
+                  <th>Order</th>
+                  <th>Unit cost</th>
+                  <th>Total value</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${renderInventoryHistoryRows(snapshot.items)}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+    `;
+  }).join("");
+
+  inventoryHistoryList.querySelectorAll(".inventory-history-restore").forEach((button) => {
+    button.addEventListener("click", () => restoreInventorySnapshot(button.dataset.snapshotId));
+  });
+  inventoryHistoryList.querySelectorAll(".inventory-history-delete").forEach((button) => {
+    button.addEventListener("click", () => deleteInventorySnapshot(button.dataset.snapshotId));
+  });
+}
+
+function renderInventoryHistoryRows(items) {
+  const grouped = groupInventorySnapshotItems(items);
+  return grouped.map(([groupName, groupItems]) => `
+    <tr class="inventory-group-row"><td colspan="6">${escapeHtml(groupName)}</td></tr>
+    ${groupItems.map((item) => `
+      <tr>
+        <td><strong>${escapeHtml(item.name)}</strong>${item.note ? `<span class="table-note">${escapeHtml(item.note)}</span>` : ""}</td>
+        <td>${formatInventoryQuantity(item.onHandDisplay)}</td>
+        <td>${formatInventoryQuantity(item.parDisplay)}</td>
+        <td class="${toNumber(item.orderDisplay) > 0 ? "inventory-order-flag" : "muted"}">${formatInventoryQuantity(item.orderDisplay)}</td>
+        <td>${money(item.unitCost)}</td>
+        <td>${money(item.totalValue)}</td>
+      </tr>
+    `).join("")}
+  `).join("");
+}
+
+function groupInventorySnapshotItems(sourceItems) {
+  const grouped = new Map();
+
+  sourceItems.forEach((item) => {
+    if (!grouped.has(item.group)) {
+      grouped.set(item.group, []);
+    }
+    grouped.get(item.group).push(item);
+  });
+
+  return ["Liquor Cabinet", "Mixer Cabinet"]
+    .map((groupName) => [
+      groupName,
+      (grouped.get(groupName) || []).sort((a, b) => getInventorySortKey(a).localeCompare(getInventorySortKey(b))),
+    ])
+    .filter(([, items]) => items.length);
+}
+
+function deleteInventorySnapshot(snapshotId) {
+  inventoryHistory = inventoryHistory.filter((snapshot) => snapshot.id !== snapshotId);
+  saveInventoryHistory();
+  renderInventoryHistory();
+  renderInventorySummary(getVisibleInventoryItems(), getVisibleInventoryItems().filter((item) => item.orderQuantity > 0));
+}
+
+function restoreInventorySnapshot(snapshotId) {
+  const snapshot = inventoryHistory.find((entry) => entry.id === snapshotId);
+  if (!snapshot) return;
+
+  inventoryOnHandOverrides = {};
+  inventoryParOverrides = {};
+
+  snapshot.items.forEach((item) => {
+    const id = slugify(item.name);
+    if (clean(item.onHandDisplay)) {
+      inventoryOnHandOverrides[id] = clean(item.onHandDisplay);
+    }
+    if (clean(item.parDisplay)) {
+      inventoryParOverrides[id] = clean(item.parDisplay);
+    }
+  });
+
+  saveInventoryOnHandOverrides();
+  saveInventoryParOverrides();
+  inventoryItems.forEach((item) => {
+    item.onHandDisplay = inventoryOnHandOverrides[item.id] ?? "";
+    item.parDisplay = inventoryParOverrides[item.id] ?? "";
+    recalculateInventoryItem(item);
+  });
+  renderInventory();
+}
+
 function saveIngredientOverride(id, bottleOz, bottlePrice) {
   const nextOverride = {
     ...(priceOverrides[id] || {}),
@@ -464,14 +892,23 @@ function addCustomRecipe(event) {
   if (!title) return;
 
   const ingredientsForRecipe = [...newIngredientRows.querySelectorAll("tr")].map((row) => {
-    const [nameInput, costInput, ozInput] = row.querySelectorAll("input");
-    const name = clean(nameInput.value);
+    const nameInput = row.querySelector('[data-field="ingredient-name"]');
+    const quantityInput = row.querySelector('[data-field="ingredient-quantity"]');
+    const ozInput = row.querySelector('[data-field="ingredient-oz"]');
+    const inputName = clean(nameInput.value);
+    const name = normalizeIngredientAlias(inputName);
+    const packageConfig = getRecipeBuilderPackageConfig(name);
+    const packageCount = clean(quantityInput?.value);
+    const oz = toNumber(ozInput.value);
     return {
       id: slugify(name),
-      raw: name,
+      raw: buildRecipeIngredientRaw(name, packageCount, packageConfig),
       name,
-      cost: toNumber(costInput.value),
-      oz: toNumber(ozInput.value),
+      cost: estimateIngredientCost(name, oz),
+      oz,
+      packageCount,
+      packageUnit: packageConfig?.unitLabel || "",
+      packageSizeOz: packageConfig?.sizeOz || 0,
     };
   }).filter((ingredient) => ingredient.name);
 
@@ -519,17 +956,139 @@ function addIngredientRow(ingredient = null) {
   const row = document.createElement("tr");
   const isFirstRow = newIngredientRows.children.length === 0;
   if (isFirstRow) row.classList.add("primary-liquor-row");
+  const packageConfig = getRecipeBuilderPackageConfig(ingredient?.name || "");
+  const quantityValue = getRecipeBuilderQuantityValue(ingredient, packageConfig);
+  const ozValue = packageConfig ? calculateRecipeBuilderOunces(quantityValue, packageConfig) || ingredient?.oz || "" : ingredient?.oz || "";
   row.innerHTML = `
     <td>
       ${isFirstRow ? '<span class="row-badge">Liquor row</span>' : ""}
-      <input type="text" value="${escapeHtml(ingredient?.name || "")}" placeholder="${isFirstRow ? "Liquor / primary alcohol" : "Ingredient name"}" aria-label="${isFirstRow ? "New recipe primary liquor" : "New recipe ingredient"}">
+      <input data-field="ingredient-name" type="text" value="${escapeHtml(ingredient?.name || "")}" placeholder="${isFirstRow ? "Liquor / primary alcohol" : "Ingredient name"}" aria-label="${isFirstRow ? "New recipe primary liquor" : "New recipe ingredient"}">
     </td>
-    <td><input type="text" inputmode="decimal" value="${escapeHtml(ingredient?.cost || "")}" placeholder="0.00" aria-label="New recipe ingredient cost"></td>
-    <td><input type="text" inputmode="decimal" value="${escapeHtml(ingredient?.oz || "")}" placeholder="0" aria-label="New recipe ingredient ounces"></td>
+    <td>
+      <input data-field="ingredient-quantity" type="text" inputmode="decimal" value="${escapeHtml(quantityValue)}" placeholder="${packageConfig?.unitLabel === "gallons" ? "2.5" : "1"}" aria-label="New recipe ingredient bottle or gallon count">
+      <span class="table-note" data-field="package-note">${escapeHtml(getRecipeBuilderPackageNote(packageConfig))}</span>
+    </td>
+    <td>
+      <input data-field="ingredient-oz" type="text" inputmode="decimal" value="${escapeHtml(ozValue)}" placeholder="0" aria-label="New recipe ingredient ounces"${packageConfig ? " readonly" : ""}>
+      <span class="table-note" data-field="oz-note">${escapeHtml(getRecipeBuilderOzNote(packageConfig))}</span>
+    </td>
     <td><button class="icon-button" type="button" aria-label="Remove ingredient row">x</button></td>
   `;
+  const nameInput = row.querySelector('[data-field="ingredient-name"]');
+  const quantityInput = row.querySelector('[data-field="ingredient-quantity"]');
+  const ozInput = row.querySelector('[data-field="ingredient-oz"]');
+  nameInput.addEventListener("input", () => syncRecipeBuilderRow(row));
+  quantityInput.addEventListener("input", () => syncRecipeBuilderRow(row));
+  ozInput.addEventListener("input", () => syncRecipeBuilderRow(row, { preserveManualOz: true }));
   row.querySelector("button").addEventListener("click", () => row.remove());
+  syncRecipeBuilderRow(row, { preserveManualOz: true });
   newIngredientRows.append(row);
+}
+
+function syncRecipeBuilderRow(row, options = {}) {
+  const nameInput = row.querySelector('[data-field="ingredient-name"]');
+  const quantityInput = row.querySelector('[data-field="ingredient-quantity"]');
+  const ozInput = row.querySelector('[data-field="ingredient-oz"]');
+  const packageNote = row.querySelector('[data-field="package-note"]');
+  const ozNote = row.querySelector('[data-field="oz-note"]');
+  const packageConfig = getRecipeBuilderPackageConfig(nameInput.value);
+
+  if (packageNote) packageNote.textContent = getRecipeBuilderPackageNote(packageConfig);
+  if (ozNote) ozNote.textContent = getRecipeBuilderOzNote(packageConfig);
+
+  if (packageConfig) {
+    ozInput.readOnly = true;
+    const ounces = calculateRecipeBuilderOunces(quantityInput.value, packageConfig);
+    ozInput.value = ounces ? formatNumber(ounces) : "";
+  } else {
+    ozInput.readOnly = false;
+    if (!options.preserveManualOz) {
+      ozInput.value = "";
+    }
+  }
+}
+
+function getRecipeBuilderPackageConfig(name) {
+  const normalizedName = normalizeIngredientAlias(clean(name));
+  if (!normalizedName) return null;
+
+  const id = slugify(normalizedName);
+  const override = priceOverrides[id];
+  const overrideBottleOz = toNumber(override?.bottleOz);
+  const mappedBottleOz = toNumber(getVendorMapping(id)?.bottleOz);
+  const isGallon = getIngredientGroup(normalizedName) === "Buckeye Beverage";
+  const sizeOz = isGallon ? (overrideBottleOz || 128) : (overrideBottleOz || mappedBottleOz);
+
+  if (!sizeOz) return null;
+
+  return {
+    sizeOz,
+    unitLabel: isGallon ? "gallons" : "bottles",
+    unitSingle: isGallon ? "gallon" : "bottle",
+  };
+}
+
+function getRecipeBuilderQuantityValue(ingredient, packageConfig) {
+  if (!ingredient) return "";
+  if (clean(ingredient.packageCount)) return clean(ingredient.packageCount);
+  if (!packageConfig || !ingredient.oz) return "";
+
+  const count = ingredient.oz / packageConfig.sizeOz;
+  if (!Number.isFinite(count) || count <= 0) return "";
+  return formatNumber(count);
+}
+
+function calculateRecipeBuilderOunces(quantityValue, packageConfig) {
+  if (!packageConfig) return 0;
+  const quantity = toNumber(quantityValue);
+  if (!quantity) return 0;
+  return quantity * packageConfig.sizeOz;
+}
+
+function getRecipeBuilderPackageNote(packageConfig) {
+  if (!packageConfig) return "Enter ounces manually if this ingredient is not mapped yet.";
+  return `${formatNumber(packageConfig.sizeOz)} oz per ${packageConfig.unitSingle}`;
+}
+
+function getRecipeBuilderOzNote(packageConfig) {
+  if (!packageConfig) return "Manual ounces";
+  return `Auto from ${packageConfig.unitLabel}`;
+}
+
+function buildRecipeIngredientRaw(name, packageCount, packageConfig) {
+  const cleanedName = clean(name);
+  const cleanedCount = clean(packageCount);
+  if (!cleanedName || !cleanedCount || !packageConfig) return cleanedName;
+
+  const count = toNumber(cleanedCount);
+  const unit = count === 1 ? packageConfig.unitSingle : packageConfig.unitLabel;
+  return `${cleanedName} ${formatNumber(count)} ${unit}`;
+}
+
+function getRecipeBuilderUnitCost(name) {
+  const normalizedName = normalizeIngredientAlias(clean(name));
+  if (!normalizedName) return 0;
+
+  const id = slugify(normalizedName);
+  const override = priceOverrides[id];
+  const overrideBottleOz = toNumber(override?.bottleOz);
+  const overrideBottlePrice = toNumber(override?.bottlePrice);
+  if (overrideBottleOz && overrideBottlePrice) {
+    return overrideBottlePrice / overrideBottleOz;
+  }
+
+  const catalogIngredient = ingredients.find((item) => item.id === id);
+  if (catalogIngredient) {
+    return getCatalogUnitCost(catalogIngredient);
+  }
+
+  return 0;
+}
+
+function estimateIngredientCost(name, ounces) {
+  const unitCost = getRecipeBuilderUnitCost(name);
+  if (!unitCost || !ounces) return 0;
+  return unitCost * ounces;
 }
 
 function deactivateRecipe(id) {
@@ -634,10 +1193,13 @@ function applyRecipeEdits(recipe) {
     ingredients: (edits.ingredients || []).map((ingredient) => ({
       ...ingredient,
       id: slugify(ingredient.name),
-      raw: ingredient.name,
+      raw: ingredient.raw || buildRecipeIngredientRaw(ingredient.name, ingredient.packageCount, getRecipeBuilderPackageConfig(ingredient.name)),
       name: ingredient.name,
       cost: toNumber(ingredient.cost),
       oz: toNumber(ingredient.oz),
+      packageCount: clean(ingredient.packageCount),
+      packageUnit: clean(ingredient.packageUnit),
+      packageSizeOz: toNumber(ingredient.packageSizeOz),
     })),
   };
 }
@@ -729,10 +1291,13 @@ function buildIngredientCatalog(sourceRecipes) {
 function getRecipeTotals(recipe) {
   const cost = sum(recipe.ingredients.map((ingredient) => getIngredientCost(ingredient).cost));
   const oz = sum(recipe.ingredients.map((ingredient) => ingredient.oz));
+  const alcoholOz = sum(recipe.ingredients.map((ingredient) => ingredient.oz * getIngredientAbvFraction(ingredient)));
   return {
     cost,
     oz,
     costPerOz: oz ? cost / oz : 0,
+    alcoholOz,
+    abvPercent: oz ? (alcoholOz / oz) * 100 : 0,
   };
 }
 
@@ -766,6 +1331,8 @@ function getCalculatedMetrics(recipe, totals, pricing) {
   return [
     { label: "Total price", value: money(totals.cost) },
     { label: "Total oz", value: formatNumber(totals.oz) },
+    { label: "Pure alcohol oz", value: formatNumber(totals.alcoholOz) },
+    { label: "Batch ABV", value: `${formatNumber(totals.abvPercent)}%` },
     { label: "Total price per oz", value: money(totals.costPerOz) },
     { label: "Price we're charging", value: money(pricing.chargePerOz) },
     { label: "Profit per oz", value: money(pricing.profitPerOz) },
@@ -787,10 +1354,63 @@ function getIngredientCost(ingredient) {
     };
   }
 
+  const catalogIngredient = ingredients.find((item) => item.id === ingredient.id);
+  const catalogUnitCost = catalogIngredient ? getCatalogUnitCost(catalogIngredient) : 0;
+  if (catalogUnitCost && ingredient.oz && !ingredient.cost) {
+    return {
+      cost: ingredient.oz * catalogUnitCost,
+      source: "catalog",
+    };
+  }
+
   return {
     cost: ingredient.cost || 0,
     source: "sheet",
   };
+}
+
+function getIngredientAbvFraction(ingredient) {
+  const percent = getIngredientAbvPercent(ingredient);
+  return percent ? percent / 100 : 0;
+}
+
+function getIngredientAbvPercent(ingredient) {
+  if (!ingredient?.id) return 0;
+  if (Object.hasOwn(INGREDIENT_ABV_PERCENT, ingredient.id)) {
+    return INGREDIENT_ABV_PERCENT[ingredient.id];
+  }
+
+  const mappedProduct = getVendorMapping(ingredient.id);
+  const parsedProofAbv = getAbvPercentFromProductName(mappedProduct?.productName);
+  if (parsedProofAbv) return parsedProofAbv;
+
+  return inferFallbackAbvPercent(ingredient.name);
+}
+
+function getAbvPercentFromProductName(productName) {
+  const cleaned = clean(productName);
+  if (!cleaned) return 0;
+
+  const proofMatch = cleaned.match(/\b(\d{2,3})(?:\s*proof|\s+(?=1(?:\.\d+)?l\b|750ml\b|375ml\b|16oz\b))/i);
+  if (!proofMatch) return 0;
+
+  const proof = Number.parseFloat(proofMatch[1]);
+  if (!Number.isFinite(proof)) return 0;
+  return proof / 2;
+}
+
+function inferFallbackAbvPercent(name) {
+  const normalized = clean(name).toLowerCase();
+  if (!normalized) return 0;
+  if (normalized.includes("vodka") || normalized.includes("tequila")) return 40;
+  if (normalized.includes("bourbon")) return 45;
+  if (normalized.includes("whiskey") || normalized.includes("whisky")) return 40;
+  if (normalized.includes("rum")) return 35;
+  if (normalized.includes("gin")) return 40;
+  if (normalized.includes("triple sec") || normalized.includes("schnapps") || normalized.includes("creme de cacao")) return 15;
+  if (normalized.includes("kahlua")) return 20;
+  if (normalized.includes("bitters")) return 44.7;
+  return 0;
 }
 
 function getCatalogUnitCost(ingredient) {
@@ -831,7 +1451,7 @@ function groupIngredientsForDisplay(sourceIngredients) {
     grouped.get(groupName).push(ingredient);
   });
 
-  return ["Liquor", "Proof", "Buckeye Beverage", "Food Vendors", "Syrups & Housemade", "Cold Brew", "Other"]
+  return ["Liquor", "Proof", "Buckeye Beverage", "Food Vendors", "Syrups & Housemade", "Other"]
     .map((groupName) => [
       groupName,
       (grouped.get(groupName) || []).sort((a, b) => getIngredientSortKey(a).localeCompare(getIngredientSortKey(b))),
@@ -888,6 +1508,101 @@ function parseCsv(text) {
   return rows;
 }
 
+function parseInventory(rows) {
+  const items = [];
+  let currentSection = "Liquor";
+
+  rows.forEach((row) => {
+    const first = clean(row[0]);
+    const last = clean(row[row.length - 1]);
+
+    if (!first) return;
+    if (/^total /i.test(first)) return;
+
+    if (isInventorySectionRow(first, last)) {
+      currentSection = first;
+      return;
+    }
+
+    if (isInventoryHeaderRow(first)) return;
+
+    const normalizedName = normalizeInventoryName(first);
+    const unitCost = toNumber(row[3]);
+    const note = clean(row[10]);
+    const group = getInventoryGroup(normalizedName, currentSection);
+    const id = slugify(normalizedName);
+    const onHandDisplay = inventoryOnHandOverrides[id] ?? clean(row[1]);
+    const parDisplay = inventoryParOverrides[id] ?? clean(row[7]);
+
+    if (group === "Bottle Service" || group === "Bubbly") return;
+    if (["Jameson", "Patron", "Pink Whitney", "Screwball"].includes(normalizedName)) return;
+
+    const item = {
+      id,
+      name: normalizedName,
+      group,
+      allowsDecimal: normalizedName === "Sweet and Sour",
+      sourceSection: currentSection,
+      onHandDisplay,
+      unitCost,
+      parDisplay,
+      note,
+    };
+
+    recalculateInventoryItem(item);
+    items.push(item);
+  });
+
+  return items;
+}
+
+function isInventorySectionRow(first, last) {
+  if (first === last && first) return true;
+  return ["Juices and Mixers", "Bottle Service Karaoke Cooler", "Bubbly in patio cooler"].includes(first);
+}
+
+function isInventoryHeaderRow(first) {
+  return /^bottle inventory/i.test(first) || /^on hand/i.test(first);
+}
+
+function normalizeInventoryName(name) {
+  const normalized = clean(name)
+    .replace(/\b1\.75ml\b/i, "")
+    .replace(/\b1\.75\b/i, "")
+    .trim();
+
+  return normalizeIngredientAlias(normalized);
+}
+
+function groupInventoryForDisplay(sourceItems) {
+  const grouped = new Map();
+
+  sourceItems.forEach((item) => {
+    if (!grouped.has(item.group)) {
+      grouped.set(item.group, []);
+    }
+    grouped.get(item.group).push(item);
+  });
+
+  return ["Liquor Cabinet", "Mixer Cabinet"]
+    .map((groupName) => [
+      groupName,
+      (grouped.get(groupName) || []).sort((a, b) => getInventorySortKey(a).localeCompare(getInventorySortKey(b))),
+    ])
+    .filter(([, items]) => items.length);
+}
+
+function getInventoryGroup(name, sourceSection) {
+  const normalized = clean(name).toLowerCase();
+  if (sourceSection === "Bottle Service Karaoke Cooler") return "Bottle Service";
+  if (sourceSection === "Bubbly in patio cooler") return "Bubbly";
+  if (normalized === "kahlua") return "Mixer Cabinet";
+
+  const ingredientGroup = getIngredientGroup(name);
+  if (ingredientGroup === "Liquor") return "Liquor Cabinet";
+  return "Mixer Cabinet";
+}
+
 function inferCategory(title) {
   const match = title.match(/\(([^)]+)\)/);
   if (match) return clean(match[1]).replace("Tequilla", "Tequila");
@@ -929,9 +1644,18 @@ function normalizeIngredientAlias(name) {
 
   if (/^tito'?s(\s+vodka)?$/.test(normalized)) return "Tito's";
   if (/^ket(t)?le one cucumber vodka$/.test(normalized)) return "Ketel One Cucumber Vodka";
+  if (/^ket(t)?le one cucumber$/.test(normalized)) return "Ketel One Cucumber Vodka";
   if (/^jose cuervo(\s+silver)?$/.test(normalized)) return "Jose Cuervo Silver";
+  if (/^bull?iet$/.test(normalized) || /^bull?iet bourbon$/.test(normalized)) return "Bulleit Bourbon";
   if (/^pomegrante schnapps$/.test(normalized)) return "Pomegranate Schnapps";
-  if (/^crown apple royal$/.test(normalized) || /^crown apple$/.test(normalized) || /^crown apple 6-?$/.test(normalized)) return "Crown Apple";
+  if (
+    /^crown apple royal$/.test(normalized) ||
+    /^crown apple$/.test(normalized) ||
+    /^crown apple 6-?$/.test(normalized) ||
+    /^crown royal apple$/.test(normalized) ||
+    /^crown royal regal apple$/.test(normalized) ||
+    /^crown apple\b/.test(normalized)
+  ) return "Crown Apple";
   if (/^jack daniels fire$/.test(normalized)) return "Jack Daniel's Fire";
   if (/^jack daniels$/.test(normalized)) return "Jack Daniel's";
   if (/^\d+\s+svedka blue raspberry$/.test(normalized) || /^svedka blue raspberry$/.test(normalized)) return "Svedka Blue Raspberry Vodka";
@@ -940,7 +1664,7 @@ function normalizeIngredientAlias(name) {
   if (/strawberry lemonade$/.test(normalized)) return "Strawberry Lemonade";
   if (/^cranberry juice$/.test(normalized) || /^cranberry$/.test(normalized)) return "Cranberry Juice";
   if (/^simple syrup$/.test(normalized)) return "Simple Syrup";
-  if (/^sour mix$/.test(normalized)) return "Sour Mix";
+  if (/^sour mix$/.test(normalized) || /^sweet and sour$/.test(normalized)) return "Sweet and Sour";
   if (/^lime juice$/.test(normalized)) return "Lime Juice";
   if (/^lemon juice$/.test(normalized)) return "Lemon Juice";
   if (/^creme de cocao$/.test(normalized)) return "Creme de Cacao";
@@ -953,8 +1677,7 @@ function getIngredientGroup(name) {
   const normalized = clean(name).toLowerCase();
 
   if (["lemonade", "pink lemonade", "cranberry juice", "sweet tea", "strawberry lemonade"].includes(normalized)) return "Buckeye Beverage";
-  if (normalized === "cold brew coffee") return "Cold Brew";
-  if (normalized === "sour mix" || normalized === "vanilla") return "Food Vendors";
+  if (normalized === "cold brew coffee" || normalized === "sour mix" || normalized === "vanilla") return "Food Vendors";
   if (
     normalized === "triple sec" ||
     normalized === "bitters" ||
@@ -989,6 +1712,7 @@ function getIngredientGroup(name) {
     normalized.includes("captain morgan") ||
     normalized.includes("jim beam") ||
     normalized.includes("absolut citron") ||
+    normalized.includes("svedka") ||
     normalized.includes("bulleit") ||
     normalized.includes("jack daniel") ||
     normalized === "kahlua"
@@ -1004,6 +1728,12 @@ function getIngredientSortKey(ingredient) {
   if (normalized === "kahlua") return "zzzz-kahlua";
   if (normalized === "simple syrup") return "zzzz-simple-syrup";
   return normalized;
+}
+
+function getInventorySortKey(item) {
+  const cabinetIndex = INVENTORY_CABINET_ORDER.indexOf(item.name);
+  if (cabinetIndex >= 0) return `${String(cabinetIndex).padStart(3, "0")}-${item.name.toLowerCase()}`;
+  return `zzz-${item.name.toLowerCase()}`;
 }
 
 function titleCaseIngredientName(name) {
@@ -1106,6 +1836,17 @@ function getIngredientAddAmount(rawValue) {
     return afterEquals.replace(/\s*=\s*.*$/, "").trim();
   }
 
+  const leadingMatch = raw.match(/^(\d+(?:\.\d+)?)\s*(gallons?|oz|cups?|packets?|pitchers?)\b/i);
+  if (leadingMatch) {
+    return clean(leadingMatch[0]);
+  }
+
+  const shorthandBottleMatch = raw.match(/(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*(l|ml)\b/i);
+  if (shorthandBottleMatch) {
+    const [, count, size, unit] = shorthandBottleMatch;
+    return `${formatInventoryQuantity(count)} bottles (${formatContainerSizeLabel(size, unit)})`;
+  }
+
   const quantityMatch = raw.match(/(\d+(?:\.\d+)?)\s*(bottles?|btls?|gallons?|oz|cups?|packets?|pitchers?)(.*)$/i);
   if (quantityMatch) {
     return clean(quantityMatch[0]);
@@ -1183,6 +1924,42 @@ function saveEditedRecipes() {
   localStorage.setItem(EDITED_RECIPE_STORAGE_KEY, JSON.stringify(editedRecipes));
 }
 
+function loadInventoryOnHandOverrides() {
+  try {
+    return JSON.parse(localStorage.getItem(INVENTORY_ON_HAND_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveInventoryOnHandOverrides() {
+  localStorage.setItem(INVENTORY_ON_HAND_STORAGE_KEY, JSON.stringify(inventoryOnHandOverrides));
+}
+
+function loadInventoryParOverrides() {
+  try {
+    return JSON.parse(localStorage.getItem(INVENTORY_PAR_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveInventoryParOverrides() {
+  localStorage.setItem(INVENTORY_PAR_STORAGE_KEY, JSON.stringify(inventoryParOverrides));
+}
+
+function loadInventoryHistory() {
+  try {
+    return JSON.parse(localStorage.getItem(INVENTORY_HISTORY_STORAGE_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveInventoryHistory() {
+  localStorage.setItem(INVENTORY_HISTORY_STORAGE_KEY, JSON.stringify(inventoryHistory));
+}
+
 function clean(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
@@ -1216,6 +1993,19 @@ function formatNumber(value) {
   }).format(value || 0);
 }
 
+function formatInventoryQuantity(value) {
+  const number = Number.parseFloat(String(value ?? "").replace(/,/g, ""));
+  if (Number.isFinite(number)) return formatNumber(number);
+  return value || "-";
+}
+
+function formatContainerSizeLabel(size, unit) {
+  const cleanedUnit = clean(unit).toLowerCase();
+  if (cleanedUnit === "l") return `${formatNumber(size)}L`;
+  if (cleanedUnit === "ml") return `${formatNumber(size)}mL`;
+  return `${formatNumber(size)} ${unit}`;
+}
+
 function formatUpdatedAt(value) {
   if (!value) return "Not updated";
 
@@ -1228,6 +2018,19 @@ function formatUpdatedAt(value) {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+  }).format(date);
+}
+
+function formatInventorySnapshotLabel(value) {
+  if (!value) return "Saved snapshot";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Saved snapshot";
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
   }).format(date);
 }
 
