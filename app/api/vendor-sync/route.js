@@ -304,10 +304,27 @@ function buildProviRequestHeaders(sessionContext) {
 }
 
 async function loadProviSessionContext() {
-  const [sessionState, capture] = await Promise.all([
-    readJson(PROVI_SESSION_PATH),
-    readJson(PROVI_CAPTURE_PATH),
-  ]);
+  const envContext = loadProviContextFromEnv();
+  if (envContext) {
+    return envContext;
+  }
+
+  let sessionState;
+  let capture;
+
+  try {
+    [sessionState, capture] = await Promise.all([
+      readJson(PROVI_SESSION_PATH),
+      readJson(PROVI_CAPTURE_PATH),
+    ]);
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      throw new Error(
+        "This sync currently uses the saved Provi session from your local computer, so it works on localhost but not on Vercel yet.",
+      );
+    }
+    throw error;
+  }
 
   const cookies = Array.isArray(sessionState?.storageState?.cookies) ? sessionState.storageState.cookies : [];
   const cookieHeader = cookies
@@ -329,6 +346,20 @@ async function loadProviSessionContext() {
   return {
     cookieHeader,
     retailerContext: String(retailerContext),
+  };
+}
+
+function loadProviContextFromEnv() {
+  const cookieHeader = String(process.env.PROVI_COOKIE_HEADER || "").trim();
+  const retailerContext = String(process.env.PROVI_RETAILER_CONTEXT || "").trim();
+
+  if (!cookieHeader || !retailerContext) {
+    return null;
+  }
+
+  return {
+    cookieHeader,
+    retailerContext,
   };
 }
 
