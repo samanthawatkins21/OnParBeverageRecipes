@@ -50,7 +50,7 @@ const PROOF_MAPPINGS = {
   mint: { vendor: "Proof", syncVendor: "Provi", productName: "Master of Mixes Cocktail Mixer - Other Mint Syrup Cocktail Essentials 375mL", bottleOz: 12.68, searchAliases: ["Master of Mixes Mint Syrup", "Mint Syrup"] },
   "peach-schnapps": { vendor: "Proof", syncVendor: "Provi", productName: "DeKuyper Peach Schnapps Peachtree 30 1L", bottleOz: 33.81, searchAliases: ["Peachtree", "DeKuyper Peachtree Schnapps"] },
   "pomegranate-schnapps": { vendor: "Proof", syncVendor: "Provi", productName: "DeKuyper Pomegranate Schnapps Pomegranate Pleasure 30 1L", bottleOz: 33.81, searchAliases: ["Pomegranate Schnapps", "DeKuyper Pomegranate Schnapps"] },
-  "raspberry-schnapps": { vendor: "Proof", syncVendor: "Provi", productName: "DeKuyper Raspberry Schnapps 33 1L", bottleOz: 33.81, searchAliases: ["Raspberry Schnapps", "Razzmatazz", "DeKuyper Razzmatazz Schnapps"] },
+  "raspberry-schnapps": { vendor: "Proof", syncVendor: "Provi", productName: "DeKuyper Raspberry Schnapps 33 1L", bottleOz: 33.81, searchAliases: ["DeKuyper Razzmatazz Schnapps", "Razzmatazz"] },
   "strawberry-schnapps": { vendor: "Proof", syncVendor: "Provi", productName: "DeKuyper Sour Strawberry Schnapps Pucker 30 1L", bottleOz: 33.81, searchAliases: ["Strawberry Pucker", "DeKuyper Pucker Strawberry Schnapps"] },
   "triple-sec": { vendor: "Proof", syncVendor: "Provi", productName: "DeKuyper Triple Sec 30 1L", bottleOz: 33.81 },
   "watermelon-schnapps": { vendor: "Proof", syncVendor: "Provi", productName: "DeKuyper Sour Watermelon Schnapps Pucker 30 1L", bottleOz: 33.81, searchAliases: ["Watermelon Pucker", "DeKuyper Pucker Watermelon Schnapps"] },
@@ -335,7 +335,8 @@ function createRecipeCard(recipe, state) {
   if (deleteButton) {
     deleteButton.addEventListener("click", () => deleteCustomRecipe(recipe.id));
   }
-  card.querySelector(".recipe-card__numbers").innerHTML = [
+  const summaryNumbers = card.querySelector(".recipe-card__numbers");
+  summaryNumbers.innerHTML = [
     ["Total cost", money(totals.cost)],
     ["Total oz", formatNumber(totals.oz)],
     ["ABV", `${formatNumber(totals.abvPercent)}%`],
@@ -352,21 +353,41 @@ function createRecipeCard(recipe, state) {
     row.innerHTML = `
       <td><strong>${escapeHtml(ingredient.name)}</strong>${addAmount ? `<span class="table-note">${escapeHtml(addAmount)}</span>` : ""}</td>
       <td class="${liveCost.source === "override" ? "updated-cost" : ""}">${money(liveCost.cost)}</td>
-      <td>${formatNumber(ingredient.oz)}</td>
+      <td>${formatRecipeIngredientAmount(ingredient)}</td>
     `;
     tbody.append(row);
   });
 
-  getCalculatedMetrics(recipe, totals, pricing).forEach((metric) => {
-    const row = document.createElement("tr");
-    row.className = "muted";
-    row.innerHTML = `
-      <td>${escapeHtml(metric.label)}</td>
-      <td>${metric.value}</td>
-      <td></td>
-    `;
-    tbody.append(row);
-  });
+  const detailMetrics = getCalculatedMetrics(recipe, totals, pricing);
+  const details = document.createElement("details");
+  details.className = "recipe-card__details";
+  details.innerHTML = `
+    <summary class="recipe-card__details-summary">Show more</summary>
+    <div class="recipe-card__details-body"></div>
+  `;
+
+  const detailsBody = details.querySelector(".recipe-card__details-body");
+  detailsBody.append(summaryNumbers);
+
+  const metricsTableWrap = document.createElement("div");
+  metricsTableWrap.className = "recipe-table-wrap recipe-table-wrap--details";
+  metricsTableWrap.innerHTML = `
+    <table class="recipe-table recipe-table--details">
+      <tbody>
+        ${detailMetrics
+          .map(
+            (metric) => `
+              <tr class="muted">
+                <td>${escapeHtml(metric.label)}</td>
+                <td>${metric.value}</td>
+              </tr>`,
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
+  detailsBody.append(metricsTableWrap);
+  card.append(details);
 
   return card;
 }
@@ -599,7 +620,7 @@ function createInventoryRow(item, mode) {
   const isParEditable = Boolean(inventoryParEditState[item.id]);
   const linkedNotes = [];
   if (item.linkedIngredientName) linkedNotes.push(`<span class="table-note table-note--accent">Linked to ${escapeHtml(item.linkedIngredientName)}</span>`);
-  if (item.vendorProduct) linkedNotes.push(`<span class="table-note">${escapeHtml(item.vendorProduct.vendor)}: ${escapeHtml(item.vendorProduct.productName)}</span>`);
+  if (item.vendorProduct) linkedNotes.push(`<span class="table-note table-note--accent">${escapeHtml(item.vendorProduct.vendor)} mapped</span><span class="table-note">${escapeHtml(item.vendorProduct.productName)}</span>`);
   row.innerHTML = `
     <td><strong>${escapeHtml(item.name)}</strong>${item.note ? `<span class="table-note">${escapeHtml(item.note)}</span>` : ""}${linkedNotes.join("")}</td>
     <td>${mode === "stock" ? `<input class="inventory-input" data-field="onHand" type="text" inputmode="${inputMode}" value="${escapeHtml(item.onHandDisplay)}" aria-label="On hand for ${escapeHtml(item.name)}">` : formatInventoryQuantity(item.onHandDisplay)}</td>
@@ -681,7 +702,22 @@ function syncInventoryItemCatalogLinks() {
     const ingredient = ingredientById.get(item.id) || null;
     item.linkedIngredientName = ingredient?.name || item.name;
     item.vendorProduct = ingredient?.vendorProduct || getVendorMapping(item.id) || null;
+    item.unitCost = getInventoryBottleCost(item, ingredient);
+    recalculateInventoryItem(item);
   });
+}
+
+function getInventoryBottleCost(item, ingredient) {
+  const override = priceOverrides[item.id];
+  const overrideBottlePrice = toNumber(override?.bottlePrice);
+  if (overrideBottlePrice > 0) return overrideBottlePrice;
+
+  if (ingredient) {
+    const catalogBottleCost = getIngredientBottleCost(ingredient);
+    if (catalogBottleCost > 0) return catalogBottleCost;
+  }
+
+  return item.baseUnitCost || item.unitCost || 0;
 }
 
 function getVisibleInventoryItems() {
@@ -1490,6 +1526,17 @@ function getCatalogCost(ingredient) {
   return getCatalogUnitCost(ingredient) * ingredient.totalOz;
 }
 
+function getIngredientBottleCost(ingredient) {
+  const override = priceOverrides[ingredient.id];
+  const overrideBottlePrice = toNumber(override?.bottlePrice);
+  if (overrideBottlePrice > 0) return overrideBottlePrice;
+
+  const bottleOz = toNumber(override?.bottleOz) || toNumber(ingredient.vendorProduct?.bottleOz);
+  const unitCost = getCatalogUnitCost(ingredient);
+  if (bottleOz > 0 && unitCost > 0) return bottleOz * unitCost;
+  return 0;
+}
+
 function countOverrides() {
   return Object.keys(priceOverrides).filter((key) => {
     const override = priceOverrides[key];
@@ -1612,6 +1659,7 @@ function parseInventory(rows) {
       allowsDecimal: normalizedName === "Sweet and Sour",
       sourceSection: currentSection,
       onHandDisplay,
+      baseUnitCost: unitCost,
       unitCost,
       parDisplay,
       note,
@@ -1645,6 +1693,7 @@ function ensureInventoryPlaceholder(items, config) {
     allowsDecimal: false,
     sourceSection: config.group,
     onHandDisplay: inventoryOnHandOverrides[id] ?? "0",
+    baseUnitCost: config.unitCost || 0,
     unitCost: config.unitCost || 0,
     parDisplay: inventoryParOverrides[id] ?? "0",
     note: config.note || "",
@@ -1827,6 +1876,22 @@ function getIngredientGroup(name) {
   }
 
   return "Other";
+}
+
+function formatRecipeIngredientAmount(ingredient) {
+  if (shouldShowIngredientInGallons(ingredient)) {
+    return `${formatNumber(ingredient.oz / 128)} gal`;
+  }
+  return formatNumber(ingredient.oz);
+}
+
+function shouldShowIngredientInGallons(ingredient) {
+  const normalizedName = clean(ingredient?.name).toLowerCase();
+  return (
+    getIngredientGroup(ingredient?.name) === "Buckeye Beverage" ||
+    normalizedName === "water" ||
+    normalizedName === "simple syrup"
+  );
 }
 
 function getIngredientSortKey(ingredient) {

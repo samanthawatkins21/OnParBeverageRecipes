@@ -298,7 +298,7 @@ export default function DashboardPage() {
                     <tr>
                       <th>Recipe</th>
                       <th>$</th>
-                      <th>Oz</th>
+                      <th>Amount</th>
                     </tr>
                   </thead>
                   <tbody></tbody>
