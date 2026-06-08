@@ -237,6 +237,7 @@ function switchTab(tabName) {
 
 function render() {
   ingredients = buildIngredientCatalog(getActiveRecipes());
+  syncInventoryItemCatalogLinks();
   renderStats();
   renderRecipes();
   renderPricing();
@@ -596,8 +597,11 @@ function createInventoryRow(item, mode) {
   row.className = mode === "order" && item.orderQuantity > 0 ? "inventory-row--order" : "";
   const inputMode = item.allowsDecimal ? "decimal" : "numeric";
   const isParEditable = Boolean(inventoryParEditState[item.id]);
+  const linkedNotes = [];
+  if (item.linkedIngredientName) linkedNotes.push(`<span class="table-note table-note--accent">Linked to ${escapeHtml(item.linkedIngredientName)}</span>`);
+  if (item.vendorProduct) linkedNotes.push(`<span class="table-note">${escapeHtml(item.vendorProduct.vendor)}: ${escapeHtml(item.vendorProduct.productName)}</span>`);
   row.innerHTML = `
-    <td><strong>${escapeHtml(item.name)}</strong>${item.note ? `<span class="table-note">${escapeHtml(item.note)}</span>` : ""}</td>
+    <td><strong>${escapeHtml(item.name)}</strong>${item.note ? `<span class="table-note">${escapeHtml(item.note)}</span>` : ""}${linkedNotes.join("")}</td>
     <td>${mode === "stock" ? `<input class="inventory-input" data-field="onHand" type="text" inputmode="${inputMode}" value="${escapeHtml(item.onHandDisplay)}" aria-label="On hand for ${escapeHtml(item.name)}">` : formatInventoryQuantity(item.onHandDisplay)}</td>
     <td>${mode === "stock" ? `<div class="inventory-par-cell"><input class="inventory-input inventory-input--par ${isParEditable ? "is-editing" : "is-locked"}" data-field="par" type="text" inputmode="${inputMode}" value="${escapeHtml(item.parDisplay)}" aria-label="Par for ${escapeHtml(item.name)}" ${isParEditable ? "" : "readonly"}><button class="mini-button inventory-par-toggle" data-par-toggle="${escapeHtml(item.id)}" type="button">${isParEditable ? "Done" : "Edit"}</button></div>` : formatInventoryQuantity(item.parDisplay)}</td>
     <td data-cell="order" class="${item.orderQuantity > 0 ? "inventory-order-flag" : "muted"}">${formatInventoryQuantity(mode === "order" ? orderQuantityForMode : item.orderDisplay)}</td>
@@ -668,6 +672,16 @@ function renderInventoryPanels() {
 
 function getInventoryReorderItems(sourceItems) {
   return sourceItems.filter((item) => item.orderQuantity > 0 && !item.excludeFromOrderList);
+}
+
+function syncInventoryItemCatalogLinks() {
+  const ingredientById = new Map(ingredients.map((ingredient) => [ingredient.id, ingredient]));
+
+  inventoryItems.forEach((item) => {
+    const ingredient = ingredientById.get(item.id) || null;
+    item.linkedIngredientName = ingredient?.name || item.name;
+    item.vendorProduct = ingredient?.vendorProduct || getVendorMapping(item.id) || null;
+  });
 }
 
 function getVisibleInventoryItems() {
@@ -1213,7 +1227,14 @@ function applyRecipeOrder(sourceRecipes, order) {
       id: slugify(displayTitle),
       title: displayTitle,
       sourceTitle: source.title,
-      ingredients: source.ingredients.map((ingredient) => ({ ...ingredient })),
+      ingredients: source.ingredients.map((ingredient) => {
+        const mappedName = getIngredientName(ingredient.raw, displayTitle);
+        return {
+          ...ingredient,
+          id: slugify(mappedName),
+          name: mappedName,
+        };
+      }),
       metrics: source.metrics.map((metric) => ({ ...metric })),
     };
   }).filter(Boolean);
@@ -1495,7 +1516,7 @@ function groupIngredientsForDisplay(sourceIngredients) {
     grouped.get(groupName).push(ingredient);
   });
 
-  return ["Liquor", "Proof", "Buckeye Beverage", "Food Vendors", "Syrups & Housemade", "Other"]
+  return ["Liquor", "Proof", "Buckeye Beverage", "Food Vendors", "Made In House", "Other"]
     .map((groupName) => [
       groupName,
       (grouped.get(groupName) || []).sort((a, b) => getIngredientSortKey(a).localeCompare(getIngredientSortKey(b))),
@@ -1572,7 +1593,10 @@ function parseInventory(rows) {
 
     const normalizedName = normalizeInventoryName(first);
     const unitCost = toNumber(row[3]);
-    const note = clean(row[10]);
+    let note = clean(row[10]);
+    if (normalizedName === "Bombay Sapphire" && /do not order for now/i.test(note)) {
+      note = "";
+    }
     const group = getInventoryGroup(normalizedName, currentSection);
     const id = slugify(normalizedName);
     const onHandDisplay = inventoryOnHandOverrides[id] ?? clean(row[1]);
@@ -1772,8 +1796,8 @@ function getIngredientGroup(name) {
   ) {
     return "Proof";
   }
-  if (normalized === "blue Dot Juice".toLowerCase()) return "Syrups & Housemade";
-  if (normalized === "simple syrup" || normalized.includes("syrup")) return "Syrups & Housemade";
+  if (normalized === "blue Dot Juice".toLowerCase()) return "Made In House";
+  if (normalized === "simple syrup" || normalized.includes("syrup")) return "Made In House";
   if (
     normalized.includes("juice") ||
     normalized.includes("mix") ||

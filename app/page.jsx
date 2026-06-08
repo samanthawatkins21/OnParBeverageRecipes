@@ -233,6 +233,7 @@ export default function DashboardPage() {
                   <div>
                     <p className="eyebrow">Reorder List</p>
                     <h2>Needs To Be Ordered</h2>
+                    <p className="formula-note inventory-note">Liquor orders stay in bottles. Mixer Cabinet orders round up to full cases of 12.</p>
                   </div>
                 </div>
                 <div className="inventory-table-wrap">
@@ -242,7 +243,7 @@ export default function DashboardPage() {
                         <th>Item</th>
                         <th>On hand</th>
                         <th>Par</th>
-                        <th>Order (case of 12)</th>
+                        <th>Order (liquor bottles, mixer cases of 12)</th>
                         <th>Unit cost</th>
                         <th>Est. reorder cost</th>
                       </tr>

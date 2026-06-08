@@ -470,6 +470,11 @@ td {
   font-size: 1.45rem;
 }
 
+.inventory-note {
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
 .inventory-table {
   width: 100%;
   border-collapse: collapse;
