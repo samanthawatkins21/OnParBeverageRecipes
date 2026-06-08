@@ -335,8 +335,7 @@ function createRecipeCard(recipe, state) {
   if (deleteButton) {
     deleteButton.addEventListener("click", () => deleteCustomRecipe(recipe.id));
   }
-  const summaryNumbers = card.querySelector(".recipe-card__numbers");
-  summaryNumbers.innerHTML = [
+  card.querySelector(".recipe-card__numbers").innerHTML = [
     ["Total cost", money(totals.cost)],
     ["Total oz", formatNumber(totals.oz)],
     ["ABV", `${formatNumber(totals.abvPercent)}%`],
@@ -353,7 +352,7 @@ function createRecipeCard(recipe, state) {
     row.innerHTML = `
       <td><strong>${escapeHtml(ingredient.name)}</strong>${addAmount ? `<span class="table-note">${escapeHtml(addAmount)}</span>` : ""}</td>
       <td class="${liveCost.source === "override" ? "updated-cost" : ""}">${money(liveCost.cost)}</td>
-      <td>${formatRecipeIngredientAmount(ingredient)}</td>
+      <td>${formatNumber(ingredient.oz)}</td>
     `;
     tbody.append(row);
   });
@@ -367,8 +366,6 @@ function createRecipeCard(recipe, state) {
   `;
 
   const detailsBody = details.querySelector(".recipe-card__details-body");
-  detailsBody.append(summaryNumbers);
-
   const metricsTableWrap = document.createElement("div");
   metricsTableWrap.className = "recipe-table-wrap recipe-table-wrap--details";
   metricsTableWrap.innerHTML = `
@@ -1876,22 +1873,6 @@ function getIngredientGroup(name) {
   }
 
   return "Other";
-}
-
-function formatRecipeIngredientAmount(ingredient) {
-  if (shouldShowIngredientInGallons(ingredient)) {
-    return `${formatNumber(ingredient.oz / 128)} gal`;
-  }
-  return formatNumber(ingredient.oz);
-}
-
-function shouldShowIngredientInGallons(ingredient) {
-  const normalizedName = clean(ingredient?.name).toLowerCase();
-  return (
-    getIngredientGroup(ingredient?.name) === "Buckeye Beverage" ||
-    normalizedName === "water" ||
-    normalizedName === "simple syrup"
-  );
 }
 
 function getIngredientSortKey(ingredient) {
