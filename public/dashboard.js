@@ -1813,7 +1813,7 @@ function normalizeIngredientAlias(name) {
   ) return "Crown Apple";
   if (/^jack daniels fire$/.test(normalized)) return "Jack Daniel's Fire";
   if (/^jack daniels$/.test(normalized)) return "Jack Daniel's";
-  if (/^\d+\s+svedka blue raspberry$/.test(normalized) || /^svedka blue raspberry$/.test(normalized)) return "Svedka Blue Raspberry Vodka";
+  if (/^svedka$/.test(normalized) || /^\d+\s+svedka blue raspberry$/.test(normalized) || /^svedka blue raspberry$/.test(normalized)) return "Svedka Blue Raspberry Vodka";
   if (/^gallon lemonade$/.test(normalized) || /^lemonade$/.test(normalized)) return "Lemonade";
   if (/pink lemonade$/.test(normalized)) return "Pink Lemonade";
   if (/strawberry lemonade$/.test(normalized)) return "Strawberry Lemonade";
