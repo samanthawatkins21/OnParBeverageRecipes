@@ -64,7 +64,7 @@ async function syncProviPrices(items, context) {
   return syncVendorWithProvi(items, {
     ...context,
     vendorName: "Provi",
-    distributorHints: [],
+    distributorHints: ["Southern Glazer's Wine & Spirits", "Southern Glazers", "SGWS"],
   });
 }
 
@@ -137,16 +137,22 @@ async function syncVendorWithProvi(items, context) {
 
 async function fetchMatchedProviProduct(item, sessionContext, searchCache, distributorHints = []) {
   const product = item?.vendorProduct || {};
-  const query = getSearchQuery(product.productName);
-  const cacheKey = `${sessionContext.retailerContext}::${query}`;
-  let results = searchCache.get(cacheKey);
+  const queries = getSearchQueries(product, item);
 
-  if (!results) {
-    results = await fetchProviProductLines(query, sessionContext);
-    searchCache.set(cacheKey, results);
+  for (const query of queries) {
+    const cacheKey = `${sessionContext.retailerContext}::${query}`;
+    let results = searchCache.get(cacheKey);
+
+    if (!results) {
+      results = await fetchProviProductLines(query, sessionContext);
+      searchCache.set(cacheKey, results);
+    }
+
+    const match = findMatchingProviProductLine(results, item, distributorHints);
+    if (match) return match;
   }
 
-  return findMatchingProviProductLine(results, item, distributorHints);
+  return null;
 }
 
 async function fetchProviProductLines(productName, sessionContext) {
@@ -276,6 +282,18 @@ function stripSizeLabel(text) {
 function getSearchQuery(text) {
   const stripped = stripSizeLabel(text);
   return stripped || String(text || "").trim();
+}
+
+function getSearchQueries(product, item) {
+  const values = [
+    product?.productName,
+    ...(Array.isArray(product?.searchAliases) ? product.searchAliases : []),
+    item?.name,
+    stripSizeLabel(product?.productName).replace(/\b\d+\b/g, " ").replace(/\s{2,}/g, " ").trim(),
+    stripSizeLabel(item?.name),
+  ];
+
+  return [...new Set(values.map((value) => getSearchQuery(value)).filter(Boolean))];
 }
 
 function parseBottleOzFromText(value) {
