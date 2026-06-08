@@ -40,36 +40,36 @@ const INVENTORY_CABINET_ORDER = [
 ];
 const DEFAULT_BATCH_LABEL = "12 gallon keg";
 const PROOF_MAPPINGS = {
-  "apple-pucker": { vendor: "Proof", productName: "DeKuyper Sour Apple Schnapps Pucker 30 1L", bottleOz: 33.81 },
-  "apple-schnapps": { vendor: "Proof", productName: "Llord's Apple Schnapps 1L", bottleOz: 33.81 },
-  bitters: { vendor: "Proof", productName: "Angostura Bitters Aromatic 16oz", bottleOz: 16 },
-  "blueberry-schnapps": { vendor: "Proof", productName: "DeKuyper Blueberry Schnapps 30 1L", bottleOz: 33.81 },
-  "creme-de-cacao": { vendor: "Proof", productName: "Llords Creme De Cacao 30 1L", bottleOz: 33.81 },
-  "lemon-juice": { vendor: "Proof", productName: "Finest Call Single Pressed Lemon Juice 1L", bottleOz: 33.81 },
-  "lime-juice": { vendor: "Proof", productName: "Finest Call Lime Juice 1L", bottleOz: 33.81 },
-  mint: { vendor: "Proof", productName: "Master of Mixes Cocktail Mixer - Other Mint Syrup Cocktail Essentials 375mL", bottleOz: 12.68 },
-  "peach-schnapps": { vendor: "Proof", productName: "DeKuyper Peach Schnapps Peachtree 30 1L", bottleOz: 33.81 },
-  "pomegranate-schnapps": { vendor: "Proof", productName: "DeKuyper Pomegranate Schnapps Pomegranate Pleasure 30 1L", bottleOz: 33.81 },
-  "raspberry-schnapps": { vendor: "Proof", productName: "DeKuyper Raspberry Schnapps 33 1L", bottleOz: 33.81 },
-  "strawberry-schnapps": { vendor: "Proof", productName: "DeKuyper Sour Strawberry Schnapps Pucker 30 1L", bottleOz: 33.81 },
-  "triple-sec": { vendor: "Proof", productName: "DeKuyper Triple Sec 30 1L", bottleOz: 33.81 },
-  "watermelon-schnapps": { vendor: "Proof", productName: "DeKuyper Sour Watermelon Schnapps Pucker 30 1L", bottleOz: 33.81 },
+  "apple-pucker": { vendor: "Proof", syncVendor: "Provi", productName: "DeKuyper Sour Apple Schnapps Pucker 30 1L", bottleOz: 33.81 },
+  "apple-schnapps": { vendor: "Proof", syncVendor: "Provi", productName: "Llord's Apple Schnapps 1L", bottleOz: 33.81 },
+  bitters: { vendor: "Proof", syncVendor: "Provi", productName: "Angostura Bitters Aromatic 16oz", bottleOz: 16 },
+  "blueberry-schnapps": { vendor: "Proof", syncVendor: "Provi", productName: "DeKuyper Blueberry Schnapps 30 1L", bottleOz: 33.81 },
+  "creme-de-cacao": { vendor: "Proof", syncVendor: "Provi", productName: "Llords Creme De Cacao 30 1L", bottleOz: 33.81 },
+  "lemon-juice": { vendor: "Proof", syncVendor: "Provi", productName: "Finest Call Single Pressed Lemon Juice 1L", bottleOz: 33.81 },
+  "lime-juice": { vendor: "Proof", syncVendor: "Provi", productName: "Finest Call Lime Juice 1L", bottleOz: 33.81 },
+  mint: { vendor: "Proof", syncVendor: "Provi", productName: "Master of Mixes Cocktail Mixer - Other Mint Syrup Cocktail Essentials 375mL", bottleOz: 12.68 },
+  "peach-schnapps": { vendor: "Proof", syncVendor: "Provi", productName: "DeKuyper Peach Schnapps Peachtree 30 1L", bottleOz: 33.81 },
+  "pomegranate-schnapps": { vendor: "Proof", syncVendor: "Provi", productName: "DeKuyper Pomegranate Schnapps Pomegranate Pleasure 30 1L", bottleOz: 33.81 },
+  "raspberry-schnapps": { vendor: "Proof", syncVendor: "Provi", productName: "DeKuyper Raspberry Schnapps 33 1L", bottleOz: 33.81 },
+  "strawberry-schnapps": { vendor: "Proof", syncVendor: "Provi", productName: "DeKuyper Sour Strawberry Schnapps Pucker 30 1L", bottleOz: 33.81 },
+  "triple-sec": { vendor: "Proof", syncVendor: "Provi", productName: "DeKuyper Triple Sec 30 1L", bottleOz: 33.81 },
+  "watermelon-schnapps": { vendor: "Proof", syncVendor: "Provi", productName: "DeKuyper Sour Watermelon Schnapps Pucker 30 1L", bottleOz: 33.81 },
 };
 const OHLQ_MAPPINGS = {
-  "absolut-citron": { vendor: "OHLQ", productName: "Absolut Citron Vodka 1.75L", bottleOz: 59.17 },
-  "bombay-sapphire": { vendor: "OHLQ", productName: "Bombay Sapphire Gin 1.75L", bottleOz: 59.17 },
-  "bulleit-bourbon": { vendor: "OHLQ", productName: "Bulleit Bourbon 1.75L", bottleOz: 59.17 },
-  "captain-morgan": { vendor: "OHLQ", productName: "Captain Morgan Original Spiced Rum 1.75L", bottleOz: 59.17 },
-  "crown-apple": { vendor: "OHLQ", productName: "Crown Royal Regal Apple 1.75L", bottleOz: 59.17 },
-  "crown-royal": { vendor: "OHLQ", productName: "Crown Royal Canadian Whisky 1.75L", bottleOz: 59.17 },
-  "jack-daniel-s": { vendor: "OHLQ", productName: "Jack Daniel's Old No. 7 1.75L", bottleOz: 59.17 },
-  "jack-daniel-s-fire": { vendor: "OHLQ", productName: "Jack Daniel's Tennessee Fire 1.75L", bottleOz: 59.17 },
-  "jim-beam": { vendor: "OHLQ", productName: "Jim Beam Bourbon 1.75L", bottleOz: 59.17 },
-  "jose-cuervo-silver": { vendor: "OHLQ", productName: "Jose Cuervo Especial Silver 1.75L", bottleOz: 59.17 },
-  kahlua: { vendor: "OHLQ", productName: "Kahlua Coffee Liqueur 1L", bottleOz: 33.81 },
-  "ketel-one-cucumber-vodka": { vendor: "OHLQ", productName: "Ketel One Botanical Cucumber & Mint 1L", bottleOz: 33.81 },
-  "svedka-blue-raspberry-vodka": { vendor: "OHLQ", productName: "Svedka Blue Raspberry Vodka 750mL", bottleOz: 25.36 },
-  "tito-s": { vendor: "OHLQ", productName: "Tito's Handmade Vodka 1.75L", bottleOz: 59.17 },
+  "absolut-citron": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Absolut Citron Vodka 1.75L", bottleOz: 59.17 },
+  "bombay-sapphire": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Bombay Sapphire Gin 1.75L", bottleOz: 59.17 },
+  "bulleit-bourbon": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Bulleit Bourbon 1.75L", bottleOz: 59.17 },
+  "captain-morgan": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Captain Morgan Original Spiced Rum 1.75L", bottleOz: 59.17 },
+  "crown-apple": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Crown Royal Regal Apple 1.75L", bottleOz: 59.17 },
+  "crown-royal": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Crown Royal Canadian Whisky 1.75L", bottleOz: 59.17 },
+  "jack-daniel-s": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Jack Daniel's Old No. 7 1.75L", bottleOz: 59.17 },
+  "jack-daniel-s-fire": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Jack Daniel's Tennessee Fire 1.75L", bottleOz: 59.17 },
+  "jim-beam": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Jim Beam Bourbon 1.75L", bottleOz: 59.17 },
+  "jose-cuervo-silver": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Jose Cuervo Especial Silver 1.75L", bottleOz: 59.17 },
+  kahlua: { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Kahlua Coffee Liqueur 1L", bottleOz: 33.81 },
+  "ketel-one-cucumber-vodka": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Ketel One Botanical Cucumber & Mint 1L", bottleOz: 33.81 },
+  "svedka-blue-raspberry-vodka": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Svedka Blue Raspberry Vodka 750mL", bottleOz: 25.36 },
+  "tito-s": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Tito's Handmade Vodka 1.75L", bottleOz: 59.17 },
 };
 const INGREDIENT_ABV_PERCENT = {
   "absolut-citron": 40,
@@ -491,7 +491,7 @@ function renderIngredientSummary() {
         <span>Vendor scope</span>
         <select id="vendor-sync-scope">
           <option value="all"${vendorSyncScope === "all" ? " selected" : ""}>All mapped vendors</option>
-          <option value="Proof"${vendorSyncScope === "Proof" ? " selected" : ""}>Proof</option>
+          <option value="Provi"${vendorSyncScope === "Provi" ? " selected" : ""}>Provi</option>
           <option value="OHLQ"${vendorSyncScope === "OHLQ" ? " selected" : ""}>OHLQ</option>
         </select>
       </label>
@@ -1865,8 +1865,12 @@ function bindIngredientSummaryEvents() {
 function getVendorMappedIngredients(scope = "all") {
   return ingredients
     .filter((ingredient) => ingredient.id !== "water" && ingredient.vendorProduct)
-    .filter((ingredient) => scope === "all" || ingredient.vendorProduct.vendor === scope)
+    .filter((ingredient) => scope === "all" || getVendorSyncName(ingredient.vendorProduct) === scope)
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function getVendorSyncName(vendorProduct) {
+  return vendorProduct?.syncVendor || vendorProduct?.vendor || "";
 }
 
 async function runVendorSync() {
@@ -1893,6 +1897,7 @@ async function runVendorSync() {
           id: ingredient.id,
           name: ingredient.name,
           vendorProduct: ingredient.vendorProduct,
+          syncVendor: getVendorSyncName(ingredient.vendorProduct),
         })),
       }),
     });
