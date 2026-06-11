@@ -1,6 +1,7 @@
 const CSV_PATH = "./data/cocktail-recipes.csv";
 const NEW_COCKTAILS_CSV_PATH = "./data/new-cocktails.csv";
 const INVENTORY_CSV_PATH = "./data/inventory-2026-06-01.csv";
+const KEG_LEVELS_CSV_PATH = "./data/keg-levels-template.csv";
 const STORAGE_KEY = "cocktail-dashboard-ingredient-prices";
 const CHARGE_STORAGE_KEY = "cocktail-dashboard-charge-prices";
 const CUSTOM_RECIPE_STORAGE_KEY = "cocktail-dashboard-custom-recipes";
@@ -148,6 +149,8 @@ const inventoryTable = document.querySelector("#inventory-table");
 const inventoryOrderTable = document.querySelector("#inventory-order-table");
 const inventorySummary = document.querySelector("#inventory-summary");
 const inventoryHistoryList = document.querySelector("#inventory-history-list");
+const kegSummary = document.querySelector("#keg-summary");
+const kegWalls = document.querySelector("#keg-walls");
 const clearPricesButton = document.querySelector("#clear-prices");
 const clearChargesButton = document.querySelector("#clear-charges");
 const recipeForm = document.querySelector("#recipe-form");
@@ -161,6 +164,7 @@ const cardTemplate = document.querySelector("#recipe-card-template");
 let recipes = [];
 let ingredients = [];
 let inventoryItems = [];
+let kegWallItems = [];
 let priceOverrides = loadOverrides();
 let chargeOverrides = loadChargeOverrides();
 let customRecipes = loadCustomRecipes();
@@ -178,10 +182,11 @@ let vendorSyncRunning = false;
 init();
 
 async function init() {
-  const [csv, newCocktailsCsv, inventoryCsv] = await Promise.all([
+  const [csv, newCocktailsCsv, inventoryCsv, kegLevelsCsv] = await Promise.all([
     fetchCsv(CSV_PATH),
     fetchCsv(NEW_COCKTAILS_CSV_PATH),
     fetchCsv(INVENTORY_CSV_PATH),
+    fetchCsv(KEG_LEVELS_CSV_PATH),
   ]);
 
   recipes = [
@@ -191,6 +196,7 @@ async function init() {
   ].map(applyRecipeEdits);
   ingredients = buildIngredientCatalog(getActiveRecipes());
   inventoryItems = parseInventory(parseCsv(inventoryCsv));
+  kegWallItems = parseKegLevels(parseCsv(kegLevelsCsv));
   hydrateCategoryFilter(recipes);
   bindEvents();
   addIngredientRow();
@@ -243,6 +249,7 @@ function render() {
   renderPricing();
   renderIngredients();
   renderInventory();
+  renderKegLevels();
   renderOldRecipes();
 }
 
@@ -467,6 +474,7 @@ function renderIngredients() {
       const override = priceOverrides[ingredient.id] || {};
       const currentUnitCost = getCatalogUnitCost(ingredient);
       const mappedBottleOz = ingredient.vendorProduct?.bottleOz ? formatNumber(ingredient.vendorProduct.bottleOz) : "";
+      const previousPriceNote = getPreviousPriceNote(override);
       const row = document.createElement("tr");
       row.innerHTML = `
         <td>
@@ -476,7 +484,7 @@ function renderIngredients() {
         <td>${money(currentUnitCost)}</td>
         <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override.bottleOz ?? "")}" placeholder="${escapeHtml(mappedBottleOz)}" aria-label="Bottle ounces for ${escapeHtml(ingredient.name)}"></td>
         <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override.bottlePrice ?? "")}" aria-label="Bottle price for ${escapeHtml(ingredient.name)}"></td>
-        <td class="muted">${formatUpdatedAt(override.updatedAt)}</td>
+        <td class="muted">${formatUpdatedAt(override.updatedAt)}${previousPriceNote ? `<span class="table-note">${escapeHtml(previousPriceNote)}</span>` : ""}</td>
         <td><button class="mini-button" type="button">Update</button></td>
       `;
 
@@ -534,6 +542,64 @@ function renderInventory() {
   renderInventoryHistory();
 }
 
+function renderKegLevels() {
+  if (!kegSummary || !kegWalls) return;
+
+  const wallNames = ["Patio", "Main", "Karaoke"];
+  const totalTaps = kegWallItems.length;
+  const cocktailCount = kegWallItems.filter((item) => normalizeTitle(item.type) === "cocktail").length;
+  const shotCount = kegWallItems.filter((item) => normalizeTitle(item.type) === "shots").length;
+
+  kegSummary.innerHTML = `
+    <h2>Keg Levels</h2>
+    <div class="summary-line"><span>Total taps</span><strong>${totalTaps}</strong></div>
+    <div class="summary-line"><span>Walls tracked</span><strong>${wallNames.length}</strong></div>
+    <div class="summary-line"><span>Cocktail taps</span><strong>${cocktailCount}</strong></div>
+    <div class="summary-line"><span>Shot lines</span><strong>${shotCount}</strong></div>
+  `;
+
+  kegWalls.innerHTML = wallNames
+    .map((wallName) => renderKegWallBlock(wallName, kegWallItems.filter((item) => item.wall === wallName)))
+    .join("");
+}
+
+function renderKegWallBlock(wallName, items) {
+  return `
+    <section class="keg-wall-card">
+      <div class="keg-wall-card__header">
+        <div>
+          <p class="eyebrow">Tap wall</p>
+          <h2>${escapeHtml(wallName)}</h2>
+        </div>
+        <strong>${items.length} taps</strong>
+      </div>
+      <div class="inventory-table-wrap">
+        <table class="inventory-table keg-table">
+          <thead>
+            <tr>
+              <th>Tap #</th>
+              <th>Type</th>
+              <th>Brand</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items
+              .map(
+                (item) => `
+                  <tr>
+                    <td>${item.tapNumber}</td>
+                    <td>${escapeHtml(item.type)}</td>
+                    <td><strong>${escapeHtml(item.brand)}</strong></td>
+                  </tr>`,
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  `;
+}
+
 function renderInventorySummary(visibleItems, reorderItems) {
   const totalValue = sum(visibleItems.filter((item) => !item.excludeFromInventoryValue).map((item) => item.totalValue));
   const reorderCost = sum(reorderItems.filter((item) => !item.excludeFromInventoryValue).map((item) => getInventoryRoundedOrderQuantity(item) * item.unitCost));
@@ -587,6 +653,12 @@ function renderInventoryOrderTable(reorderItems) {
     items.forEach((item) => inventoryOrderTable.append(createInventoryRow(item, "order")));
   });
 
+  const vendorTotals = getInventoryVendorTotals(reorderItems);
+  ["OHLQ", "Proof"].forEach((vendorName) => {
+    const total = vendorTotals.get(vendorName) || 0;
+    inventoryOrderTable.append(createInventoryTotalRow(`${vendorName} reorder total`, money(total), "inventory-subtotal-row"));
+  });
+
   const reorderCost = sum(reorderItems.filter((item) => !item.excludeFromInventoryValue).map((item) => getInventoryRoundedOrderQuantity(item) * item.unitCost));
   inventoryOrderTable.append(createInventoryTotalRow("Estimated reorder total", money(reorderCost)));
 }
@@ -598,14 +670,27 @@ function createInventoryGroupRow(groupName) {
   return row;
 }
 
-function createInventoryTotalRow(label, value) {
+function createInventoryTotalRow(label, value, className = "inventory-total-row") {
   const row = document.createElement("tr");
-  row.className = "inventory-total-row";
+  row.className = className;
   row.innerHTML = `
     <td colspan="5"><strong>${escapeHtml(label)}</strong></td>
     <td><strong>${escapeHtml(value)}</strong></td>
   `;
   return row;
+}
+
+function getInventoryVendorTotals(items) {
+  const totals = new Map();
+
+  items.forEach((item) => {
+    if (item.excludeFromInventoryValue) return;
+    const vendorName = item.vendorProduct?.vendor || "Other";
+    const currentTotal = totals.get(vendorName) || 0;
+    totals.set(vendorName, currentTotal + getInventoryRoundedOrderQuantity(item) * item.unitCost);
+  });
+
+  return totals;
 }
 
 function createInventoryRow(item, mode) {
@@ -947,6 +1032,9 @@ function saveIngredientOverride(id, bottleOz, bottlePrice) {
     bottlePrice,
     updatedAt: new Date().toISOString(),
   };
+
+  delete nextOverride.previousBottlePrice;
+  delete nextOverride.previousUpdatedAt;
 
   if (!nextOverride.bottleOz && !nextOverride.bottlePrice) {
     delete priceOverrides[id];
@@ -1679,6 +1767,36 @@ function parseInventory(rows) {
   return items;
 }
 
+function parseKegLevels(rows) {
+  const items = [];
+  let currentWall = "";
+
+  rows.forEach((row) => {
+    const cells = row.map(clean);
+    const wallCell = cells.find((cell) => ["Patio", "Main Bar", "Karaoke"].includes(cell));
+    if (wallCell) {
+      currentWall = wallCell === "Main Bar" ? "Main" : wallCell;
+      return;
+    }
+
+    const tapNumber = toNumber(cells[0]);
+    if (!tapNumber || !currentWall) return;
+
+    const type = cells[1];
+    const brand = cells[2];
+    if (!type || !brand) return;
+
+    items.push({
+      tapNumber,
+      type,
+      brand,
+      wall: currentWall,
+    });
+  });
+
+  return items.sort((a, b) => a.tapNumber - b.tapNumber);
+}
+
 function ensureInventoryPlaceholder(items, config) {
   const id = slugify(config.name);
   if (items.some((item) => item.id === id)) return;
@@ -1956,11 +2074,17 @@ async function runVendorSync() {
     let applied = 0;
     (result.updates || []).forEach((update) => {
       if (!update.id || !Number.isFinite(update.bottleOz) || !Number.isFinite(update.bottlePrice)) return;
+      const existingOverride = priceOverrides[update.id] || {};
+      const previousBottlePrice = toNumber(existingOverride.bottlePrice);
+      const nextBottlePrice = Number(update.bottlePrice);
+      const didPriceChange = previousBottlePrice > 0 && Math.abs(previousBottlePrice - nextBottlePrice) > 0.001;
       priceOverrides[update.id] = {
-        ...(priceOverrides[update.id] || {}),
+        ...existingOverride,
         bottleOz: String(update.bottleOz),
         bottlePrice: String(update.bottlePrice),
         updatedAt: update.updatedAt || new Date().toISOString(),
+        previousBottlePrice: didPriceChange ? String(previousBottlePrice) : "",
+        previousUpdatedAt: didPriceChange ? existingOverride.updatedAt || "" : "",
       };
       applied += 1;
     });
@@ -2176,6 +2300,16 @@ function formatUpdatedAt(value) {
     hour: "numeric",
     minute: "2-digit",
   }).format(date);
+}
+
+function getPreviousPriceNote(override) {
+  const currentBottlePrice = toNumber(override?.bottlePrice);
+  const previousBottlePrice = toNumber(override?.previousBottlePrice);
+  if (!currentBottlePrice || !previousBottlePrice) return "";
+  if (Math.abs(currentBottlePrice - previousBottlePrice) <= 0.001) return "";
+
+  const previousDate = override?.previousUpdatedAt ? formatUpdatedAt(override.previousUpdatedAt) : "";
+  return previousDate ? `Was ${money(previousBottlePrice)} before ${previousDate}` : `Was ${money(previousBottlePrice)}`;
 }
 
 function formatInventorySnapshotLabel(value) {
