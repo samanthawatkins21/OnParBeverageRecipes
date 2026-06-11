@@ -50,6 +50,7 @@ export default function DashboardPage() {
         <div className="top-actions" aria-label="Dashboard controls">
           <button className="tab-button is-active" data-tab="recipes" type="button">Recipes</button>
           <button className="tab-button" data-tab="pricing" type="button">Tap Wall Pricing</button>
+          <button className="tab-button" data-tab="keg-levels" type="button">Keg Levels</button>
           <button className="tab-button" data-tab="ingredients" type="button">Cocktail Ingredients</button>
           <button className="tab-button" data-tab="inventory" type="button">Inventory</button>
           <button className="tab-button" data-tab="add" type="button">Add Recipe</button>
@@ -103,6 +104,13 @@ export default function DashboardPage() {
                 <tbody id="pricing-table"></tbody>
               </table>
             </div>
+          </div>
+        </section>
+
+        <section className="panel" id="keg-levels-panel" aria-labelledby="keg-levels-tab">
+          <div className="keg-layout">
+            <aside className="keg-summary" id="keg-summary"></aside>
+            <div className="keg-walls" id="keg-walls"></div>
           </div>
         </section>
 

@@ -186,7 +186,7 @@ async function init() {
     fetchCsv(CSV_PATH),
     fetchCsv(NEW_COCKTAILS_CSV_PATH),
     fetchCsv(INVENTORY_CSV_PATH),
-    fetchCsv(KEG_LEVELS_CSV_PATH),
+    fetchOptionalCsv(KEG_LEVELS_CSV_PATH),
   ]);
 
   recipes = [
@@ -196,7 +196,7 @@ async function init() {
   ].map(applyRecipeEdits);
   ingredients = buildIngredientCatalog(getActiveRecipes());
   inventoryItems = parseInventory(parseCsv(inventoryCsv));
-  kegWallItems = parseKegLevels(parseCsv(kegLevelsCsv));
+  kegWallItems = kegLevelsCsv ? parseKegLevels(parseCsv(kegLevelsCsv)) : [];
   hydrateCategoryFilter(recipes);
   bindEvents();
   addIngredientRow();
@@ -1384,6 +1384,13 @@ function applyRecipeEdits(recipe) {
 
 async function fetchCsv(path) {
   const response = await fetch(path);
+  if (!response.ok) throw new Error(`Unable to load ${path}`);
+  return response.text();
+}
+
+async function fetchOptionalCsv(path) {
+  const response = await fetch(path);
+  if (response.status === 404) return "";
   if (!response.ok) throw new Error(`Unable to load ${path}`);
   return response.text();
 }

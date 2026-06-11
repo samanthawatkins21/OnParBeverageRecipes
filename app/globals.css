@@ -399,7 +399,8 @@ td {
 
 .ingredient-layout,
 .pricing-layout,
-.inventory-layout {
+.inventory-layout,
+.keg-layout {
   display: grid;
   grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
   gap: 16px;
@@ -408,7 +409,8 @@ td {
 
 .ingredient-summary,
 .pricing-summary,
-.inventory-summary {
+.inventory-summary,
+.keg-summary {
   position: sticky;
   top: 16px;
   border: 1px solid rgba(24, 33, 31, 0.12);
@@ -418,9 +420,56 @@ td {
 
 .ingredient-summary h2,
 .pricing-summary h2,
-.inventory-summary h2 {
+.inventory-summary h2,
+.keg-summary h2 {
   margin: 0 0 14px;
   font-size: 1.45rem;
+}
+
+.keg-walls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.keg-wall-card {
+  border: 1px solid rgba(24, 33, 31, 0.12);
+  background: rgba(255, 253, 247, 0.94);
+  box-shadow: 0 12px 28px rgba(34, 42, 36, 0.08);
+}
+
+.keg-wall-card__header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 18px 0;
+}
+
+.keg-wall-card__header h2 {
+  margin: 0;
+  font-size: 1.45rem;
+}
+
+.keg-wall-card__header strong {
+  color: var(--juniper-dark);
+  font-family: "Fraunces", serif;
+  font-size: 1.2rem;
+}
+
+.keg-table th:nth-child(1),
+.keg-table td:nth-child(1) {
+  width: 18%;
+}
+
+.keg-table th:nth-child(2),
+.keg-table td:nth-child(2) {
+  width: 26%;
+}
+
+.keg-table th:nth-child(3),
+.keg-table td:nth-child(3) {
+  width: 56%;
 }
 
 .ingredient-summary h3 {
@@ -587,6 +636,16 @@ td {
 }
 
 .inventory-total-row td:last-child {
+  color: var(--juniper-dark);
+  text-align: right;
+}
+
+.inventory-subtotal-row td {
+  border-top: 1px solid rgba(24, 33, 31, 0.1);
+  background: rgba(31, 95, 84, 0.05);
+}
+
+.inventory-subtotal-row td:last-child {
   color: var(--juniper-dark);
   text-align: right;
 }
@@ -859,18 +918,24 @@ td {
 
   .ingredient-layout,
   .pricing-layout,
-  .inventory-layout {
+  .inventory-layout,
+  .keg-layout {
     grid-template-columns: 1fr;
   }
 
   .ingredient-summary,
   .pricing-summary,
-  .inventory-summary {
+  .inventory-summary,
+  .keg-summary {
     position: static;
   }
 
   .form-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .keg-walls {
+    grid-template-columns: 1fr;
   }
 }
 
