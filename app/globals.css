@@ -314,7 +314,8 @@ select {
 
 .recipe-table,
 .ingredient-table,
-.pricing-table {
+.pricing-table,
+.weekly-usage-table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
@@ -407,10 +408,23 @@ td {
   align-items: flex-start;
 }
 
+.pricing-sections {
+  display: grid;
+  gap: 16px;
+}
+
+.pricing-section-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
 .ingredient-summary,
 .pricing-summary,
 .inventory-summary,
-.keg-summary {
+.keg-summary,
+.weekly-usage-summary {
   position: sticky;
   top: 16px;
   border: 1px solid rgba(24, 33, 31, 0.12);
@@ -421,21 +435,25 @@ td {
 .ingredient-summary h2,
 .pricing-summary h2,
 .inventory-summary h2,
-.keg-summary h2 {
+.keg-summary h2,
+.weekly-usage-summary h2 {
   margin: 0 0 14px;
   font-size: 1.45rem;
 }
 
 .keg-walls {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
 }
 
 .keg-wall-card {
   border: 1px solid rgba(24, 33, 31, 0.12);
-  background: rgba(255, 253, 247, 0.94);
-  box-shadow: 0 12px 28px rgba(34, 42, 36, 0.08);
+  background:
+    linear-gradient(180deg, rgba(31, 95, 84, 0.06), transparent 88px),
+    rgba(255, 253, 247, 0.97);
+  box-shadow: 0 16px 32px rgba(34, 42, 36, 0.09);
+  overflow: hidden;
 }
 
 .keg-wall-card__header {
@@ -443,12 +461,21 @@ td {
   align-items: flex-end;
   justify-content: space-between;
   gap: 14px;
-  padding: 18px 18px 0;
+  padding: 18px 18px 12px;
+  border-bottom: 1px solid rgba(24, 33, 31, 0.08);
 }
 
 .keg-wall-card__header h2 {
   margin: 0;
   font-size: 1.45rem;
+}
+
+.keg-wall-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .keg-wall-card__header strong {
@@ -457,19 +484,247 @@ td {
   font-size: 1.2rem;
 }
 
+.keg-wall-card__badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(198, 74, 50, 0.22);
+  background: rgba(198, 74, 50, 0.08);
+  color: var(--tomato);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
 .keg-table th:nth-child(1),
 .keg-table td:nth-child(1) {
-  width: 18%;
+  width: 7%;
 }
 
 .keg-table th:nth-child(2),
 .keg-table td:nth-child(2) {
-  width: 26%;
+  width: 11%;
 }
 
 .keg-table th:nth-child(3),
 .keg-table td:nth-child(3) {
-  width: 56%;
+  width: 28%;
+}
+
+.keg-table th:nth-child(4),
+.keg-table td:nth-child(4) {
+  width: 11%;
+}
+
+.keg-table th:nth-child(5),
+.keg-table td:nth-child(5),
+.keg-table th:nth-child(6),
+.keg-table td:nth-child(6),
+.keg-table th:nth-child(7),
+.keg-table td:nth-child(7),
+.keg-table th:nth-child(8),
+.keg-table td:nth-child(8) {
+  width: 10%;
+}
+
+.keg-level-cell {
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.keg-level-ok {
+  color: var(--pine);
+}
+
+.keg-level-low {
+  color: #b36d1f;
+}
+
+.keg-level-critical {
+  color: var(--tomato);
+}
+
+.keg-level-unknown {
+  color: var(--muted);
+}
+
+.keg-need-cell {
+  text-align: right;
+}
+
+.keg-input {
+  min-width: 84px;
+}
+
+.keg-input--par {
+  background: rgba(214, 166, 61, 0.08);
+  border-color: rgba(214, 166, 61, 0.45);
+}
+
+.keg-table tbody tr:nth-child(odd) {
+  background: rgba(255, 250, 240, 0.75);
+}
+
+.keg-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8f1e3;
+}
+
+.keg-table tbody tr:hover {
+  background: rgba(31, 95, 84, 0.08);
+}
+
+.keg-table td:nth-child(1),
+.keg-table td:nth-child(4),
+.keg-table td:nth-child(5),
+.keg-table td:nth-child(8) {
+  font-variant-numeric: tabular-nums;
+}
+
+.keg-table td:nth-child(2) {
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+}
+
+.keg-value-cell {
+  text-align: right;
+  font-weight: 700;
+}
+
+.usage-history-toggle {
+  min-width: 190px;
+}
+
+.usage-history-toggle summary {
+  cursor: pointer;
+  color: var(--juniper-dark);
+  font-size: 0.78rem;
+  font-weight: 800;
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.usage-history-toggle summary::-webkit-details-marker {
+  display: none;
+}
+
+.usage-history-toggle summary::after {
+  content: " +";
+}
+
+.usage-history-toggle[open] summary::after {
+  content: " -";
+}
+
+.usage-history-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.usage-history-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(24, 33, 31, 0.08);
+  font-size: 0.8rem;
+}
+
+.usage-history-item strong {
+  text-align: right;
+}
+
+.weekly-usage-table {
+  min-width: 760px;
+  table-layout: auto;
+  font-size: 0.86rem;
+}
+
+.weekly-usage-table th,
+.weekly-usage-table td {
+  white-space: nowrap;
+  padding: 8px 10px;
+}
+
+.weekly-usage-table th:nth-child(1),
+.weekly-usage-table td:nth-child(1) {
+  width: 64px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.weekly-usage-table th:nth-child(2),
+.weekly-usage-table td:nth-child(2) {
+  min-width: 240px;
+}
+
+.weekly-usage-table th:nth-child(3),
+.weekly-usage-table td:nth-child(3),
+.weekly-usage-table th:nth-child(4),
+.weekly-usage-table td:nth-child(4),
+.weekly-usage-table th:nth-child(5),
+.weekly-usage-table td:nth-child(5) {
+  width: 96px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.weekly-usage-table th.weekly-usage-week,
+.weekly-usage-table td.weekly-usage-week {
+  min-width: 92px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.weekly-usage-week-label {
+  display: grid;
+  gap: 2px;
+  line-height: 1.15;
+}
+
+.weekly-usage-week-label span:last-child {
+  color: var(--ink);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.weekly-usage-table .inventory-input {
+  min-height: 38px;
+  padding: 0 10px;
+}
+
+.keg-row--liquor td:first-child {
+  border-left: 4px solid rgba(198, 74, 50, 0.55);
+}
+
+.keg-row--cocktail td:first-child {
+  border-left: 4px solid rgba(214, 166, 61, 0.65);
+}
+
+.keg-row--beer td:first-child {
+  border-left: 4px solid rgba(31, 95, 84, 0.5);
+}
+
+.inventory-order-zero {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.inventory-order-value {
+  color: var(--tomato);
+  font-weight: 800;
+}
+
+.keg-table td:nth-child(3) strong {
+  display: block;
 }
 
 .ingredient-summary h3 {
@@ -926,7 +1181,8 @@ td {
   .ingredient-summary,
   .pricing-summary,
   .inventory-summary,
-  .keg-summary {
+  .keg-summary,
+  .weekly-usage-summary {
     position: static;
   }
 

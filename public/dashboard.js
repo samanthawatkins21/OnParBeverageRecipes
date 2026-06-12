@@ -2,6 +2,7 @@ const CSV_PATH = "./data/cocktail-recipes.csv";
 const NEW_COCKTAILS_CSV_PATH = "./data/new-cocktails.csv";
 const INVENTORY_CSV_PATH = "./data/inventory-2026-06-01.csv";
 const KEG_LEVELS_CSV_PATH = "./data/keg-levels-template.csv";
+const WEEKLY_USAGE_CSV_PATH = "./data/weekly-usage-history.csv";
 const STORAGE_KEY = "cocktail-dashboard-ingredient-prices";
 const CHARGE_STORAGE_KEY = "cocktail-dashboard-charge-prices";
 const CUSTOM_RECIPE_STORAGE_KEY = "cocktail-dashboard-custom-recipes";
@@ -10,6 +11,43 @@ const EDITED_RECIPE_STORAGE_KEY = "cocktail-dashboard-edited-recipes";
 const INVENTORY_ON_HAND_STORAGE_KEY = "cocktail-dashboard-inventory-on-hand";
 const INVENTORY_PAR_STORAGE_KEY = "cocktail-dashboard-inventory-par";
 const INVENTORY_HISTORY_STORAGE_KEY = "cocktail-dashboard-inventory-history";
+const KEG_ON_HAND_STORAGE_KEY = "cocktail-dashboard-keg-on-hand";
+const KEG_PAR_STORAGE_KEY = "cocktail-dashboard-keg-par";
+const KEG_PRICE_STORAGE_KEY = "cocktail-dashboard-keg-prices";
+const WEEKLY_USAGE_CURRENT_STORAGE_KEY = "cocktail-dashboard-weekly-usage-current";
+const WEEKLY_USAGE_HISTORY_STORAGE_KEY = "cocktail-dashboard-weekly-usage-history";
+const KEG_VENDOR_MAPPINGS = {
+  "michelob-ultra": "Heidelberg",
+  "busch-light": "Heidelberg",
+  "bud-light": "Heidelberg",
+  "cincy-light": "Heidelberg",
+  "summer-ale": "Heidelberg",
+  "kona-big-wave": "Heidelberg",
+  truth: "Heidelberg",
+  "stella-artois": "Heidelberg",
+  "angry-orchard": "Heidelberg",
+  "truly-wild-berry": "Heidelberg",
+  "goose-ipa": "Heidelberg",
+  budweiser: "Heidelberg",
+  "triple-jam-cider": "Heidelberg",
+  yuengling: "Heidelberg",
+  octoberfest: "Heidelberg",
+  "miller-lite": "Bonbright",
+  "pabst-blue-ribbon": "Bonbright",
+  "coors-light": "Bonbright",
+  "blue-moon": "Bonbright",
+  modelo: "Bonbright",
+  "astra-red-cream-soda": "Bonbright",
+  "voodoo-ranger-juicy-haze": "Bonbright",
+  "two-hearted-ipa": "Bonbright",
+  "dortmunder-gold-lager": "Bonbright",
+  "garage-beer-lime": "Bonbright",
+  corona: "Bonbright",
+  "breakfast-stout": "Bonbright",
+  "garage-beer": "Bonbright",
+  guinness: "Bonbright",
+  "voodoo-ranger-ipa": "Bonbright",
+};
 const INVENTORY_CABINET_ORDER = [
   "Bulleit Bourbon",
   "Crown Royal",
@@ -37,7 +75,7 @@ const INVENTORY_CABINET_ORDER = [
   "Creme de Cacao",
   "Kahlua",
   "Cold Brew",
-  "Sweet and Sour",
+  "Sour Mix",
 ];
 const DEFAULT_BATCH_LABEL = "12 gallon keg";
 const PROOF_MAPPINGS = {
@@ -143,6 +181,7 @@ const pricingTable = document.querySelector("#pricing-table");
 const pricingSummary = document.querySelector("#pricing-summary");
 const ingredientSearch = document.querySelector("#ingredient-search");
 const ingredientTable = document.querySelector("#ingredient-table");
+const kegPricingTable = document.querySelector("#keg-pricing-table");
 const ingredientSummary = document.querySelector("#ingredient-summary");
 const inventorySearch = document.querySelector("#inventory-search");
 const inventoryTable = document.querySelector("#inventory-table");
@@ -151,7 +190,14 @@ const inventorySummary = document.querySelector("#inventory-summary");
 const inventoryHistoryList = document.querySelector("#inventory-history-list");
 const kegSummary = document.querySelector("#keg-summary");
 const kegWalls = document.querySelector("#keg-walls");
+const weeklyUsageSearch = document.querySelector("#weekly-usage-search");
+const weeklyUsageHead = document.querySelector("#weekly-usage-head");
+const weeklyUsageSaveButton = document.querySelector("#save-weekly-usage");
+const weeklyUsageToggleButton = document.querySelector("#toggle-weekly-usage-history");
+const weeklyUsageSummary = document.querySelector("#weekly-usage-summary");
+const weeklyUsageTable = document.querySelector("#weekly-usage-table");
 const clearPricesButton = document.querySelector("#clear-prices");
+const clearKegPricesButton = document.querySelector("#clear-keg-prices");
 const clearChargesButton = document.querySelector("#clear-charges");
 const recipeForm = document.querySelector("#recipe-form");
 const recipeFormTitle = document.querySelector("#recipe-form-title");
@@ -165,7 +211,13 @@ let recipes = [];
 let ingredients = [];
 let inventoryItems = [];
 let kegWallItems = [];
+let weeklyUsageItems = [];
+let weeklyUsageShowMore = false;
+let weeklyUsageCurrentOverrides = loadWeeklyUsageCurrentOverrides();
+let weeklyUsageHistoryOverrides = loadWeeklyUsageHistoryOverrides();
+let kegPricingItems = [];
 let priceOverrides = loadOverrides();
+let kegPriceOverrides = loadKegPriceOverrides();
 let chargeOverrides = loadChargeOverrides();
 let customRecipes = loadCustomRecipes();
 let inactiveRecipeIds = loadInactiveRecipeIds();
@@ -173,20 +225,30 @@ let editedRecipes = loadEditedRecipes();
 let inventoryOnHandOverrides = loadInventoryOnHandOverrides();
 let inventoryParOverrides = loadInventoryParOverrides();
 let inventoryHistory = loadInventoryHistory();
+let kegOnHandOverrides = loadKegOnHandOverrides();
+let kegParOverrides = loadKegParOverrides();
 let inventoryParEditState = {};
 let editingRecipeId = null;
 let vendorSyncScope = "all";
 let vendorSyncMessage = "Press sync to check mapped vendors automatically. Vendors without a supported connection will report what is still needed.";
 let vendorSyncRunning = false;
+let kegLiveLevels = new Map();
+let kegSyncMessage = "Refresh keg levels to pull current percentages from Pour My Beer.";
+let kegSyncLoading = false;
+let kegUpdatedAt = "";
+let kegConfigUpdateRunning = false;
+let kegDeviceLevels = new Map();
+let kegTemplateAssignments = new Map();
 
 init();
 
 async function init() {
-  const [csv, newCocktailsCsv, inventoryCsv, kegLevelsCsv] = await Promise.all([
+  const [csv, newCocktailsCsv, inventoryCsv, kegLevelsCsv, weeklyUsageCsv] = await Promise.all([
     fetchCsv(CSV_PATH),
     fetchCsv(NEW_COCKTAILS_CSV_PATH),
     fetchCsv(INVENTORY_CSV_PATH),
     fetchOptionalCsv(KEG_LEVELS_CSV_PATH),
+    fetchOptionalCsv(WEEKLY_USAGE_CSV_PATH),
   ]);
 
   recipes = [
@@ -197,12 +259,15 @@ async function init() {
   ingredients = buildIngredientCatalog(getActiveRecipes());
   inventoryItems = parseInventory(parseCsv(inventoryCsv));
   kegWallItems = kegLevelsCsv ? parseKegLevels(parseCsv(kegLevelsCsv)) : [];
+  kegPricingItems = buildKegPricingCatalog(kegWallItems);
+  weeklyUsageItems = weeklyUsageCsv ? parseWeeklyUsage(parseCsv(weeklyUsageCsv)) : [];
   hydrateCategoryFilter(recipes);
   bindEvents();
   addIngredientRow();
   addIngredientRow();
   addIngredientRow();
   render();
+  runKegLevelSync();
 }
 
 function bindEvents() {
@@ -216,6 +281,12 @@ function bindEvents() {
   pricingSearch.addEventListener("input", renderPricing);
   ingredientSearch.addEventListener("input", renderIngredients);
   inventorySearch.addEventListener("input", renderInventory);
+  weeklyUsageSearch?.addEventListener("input", renderWeeklyUsage);
+  weeklyUsageSaveButton?.addEventListener("click", saveWeeklyUsageHistory);
+  weeklyUsageToggleButton?.addEventListener("click", () => {
+    weeklyUsageShowMore = !weeklyUsageShowMore;
+    renderWeeklyUsage();
+  });
   recipeForm.addEventListener("submit", addCustomRecipe);
   addIngredientRowButton.addEventListener("click", addIngredientRow);
   cancelEditButton.addEventListener("click", resetRecipeForm);
@@ -224,11 +295,18 @@ function bindEvents() {
     saveOverrides();
     render();
   });
+  clearKegPricesButton?.addEventListener("click", () => {
+    kegPriceOverrides = {};
+    saveKegPriceOverrides();
+    render();
+  });
   clearChargesButton.addEventListener("click", () => {
     chargeOverrides = {};
     saveChargeOverrides();
     render();
   });
+
+  document.addEventListener("keydown", handleEnterKeyNavigation);
 }
 
 function switchTab(tabName) {
@@ -243,6 +321,7 @@ function switchTab(tabName) {
 
 function render() {
   ingredients = buildIngredientCatalog(getActiveRecipes());
+  kegPricingItems = buildKegPricingCatalog(kegWallItems);
   syncInventoryItemCatalogLinks();
   renderStats();
   renderRecipes();
@@ -250,6 +329,7 @@ function render() {
   renderIngredients();
   renderInventory();
   renderKegLevels();
+  renderWeeklyUsage();
   renderOldRecipes();
 }
 
@@ -354,7 +434,7 @@ function createRecipeCard(recipe, state) {
   const tbody = card.querySelector("tbody");
   recipe.ingredients.forEach((ingredient) => {
     const liveCost = getIngredientCost(ingredient);
-    const addAmount = getIngredientAddAmount(ingredient.raw);
+    const addAmount = getRecipeCardAddAmount(ingredient);
     const row = document.createElement("tr");
     row.innerHTML = `
       <td><strong>${escapeHtml(ingredient.name)}</strong>${addAmount ? `<span class="table-note">${escapeHtml(addAmount)}</span>` : ""}</td>
@@ -459,10 +539,16 @@ function renderIngredients() {
     const haystack = `${ingredient.name} ${ingredient.recipes.join(" ")}`.toLowerCase();
     return haystack.includes(searchTerm);
   });
+  const visibleKegs = kegPricingItems.filter((item) => {
+    const haystack = `${item.name} ${item.type} ${item.wall} ${item.tapNumber} ${item.vendor}`.toLowerCase();
+    return haystack.includes(searchTerm);
+  });
   const groupedIngredients = groupIngredientsForDisplay(visibleIngredients);
+  const groupedKegs = groupKegPricingItemsForDisplay(visibleKegs);
 
-  renderIngredientSummary();
+  renderIngredientSummary(visibleIngredients, visibleKegs);
   ingredientTable.innerHTML = "";
+  if (kegPricingTable) kegPricingTable.innerHTML = "";
 
   groupedIngredients.forEach(([groupName, items]) => {
     const groupRow = document.createElement("tr");
@@ -494,20 +580,58 @@ function renderIngredients() {
       ingredientTable.append(row);
     });
   });
+
+  groupedKegs.forEach(([vendorName, items]) => {
+    const groupRow = document.createElement("tr");
+    groupRow.className = "ingredient-group-row";
+    groupRow.innerHTML = `<td colspan="7">${escapeHtml(vendorName)}</td>`;
+    kegPricingTable?.append(groupRow);
+
+    items.forEach((item) => {
+      const override = kegPriceOverrides[item.id] || {};
+      const currentUnitCost = getKegCatalogUnitCost(item);
+      const previousPriceNote = getPreviousPriceNote(override);
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>
+          <strong>${escapeHtml(item.name)}</strong>
+          <span class="table-note table-note--accent">${escapeHtml(item.tapSummary)}</span>
+          <span class="table-note">${escapeHtml(item.typeSummary)}</span>
+        </td>
+        <td>${vendorName === "Needs mapping" ? `<span class="table-note">${escapeHtml(vendorName)}</span>` : escapeHtml(vendorName)}</td>
+        <td>${money(currentUnitCost)}</td>
+        <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override.kegOz ?? "")}" placeholder="${escapeHtml(formatNumber(item.kegOz))}" aria-label="Keg ounces for ${escapeHtml(item.name)}"></td>
+        <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override.kegPrice ?? "")}" aria-label="Keg price for ${escapeHtml(item.name)}"></td>
+        <td class="muted">${formatUpdatedAt(override.updatedAt)}${previousPriceNote ? `<span class="table-note">${escapeHtml(previousPriceNote)}</span>` : ""}</td>
+        <td><button class="mini-button" type="button">Update</button></td>
+      `;
+
+      const [kegOzInput, kegPriceInput] = row.querySelectorAll("input");
+      const updateButton = row.querySelector("button");
+      updateButton.addEventListener("click", () => saveKegPriceOverride(item.id, kegOzInput.value, kegPriceInput.value));
+      kegPricingTable?.append(row);
+    });
+  });
 }
 
-function renderIngredientSummary() {
-  const visibleIngredients = ingredients.filter((ingredient) => ingredient.id !== "water");
+function renderIngredientSummary(visibleIngredientsInput = ingredients.filter((ingredient) => ingredient.id !== "water"), visibleKegsInput = kegPricingItems) {
+  const visibleIngredients = visibleIngredientsInput.filter((ingredient) => ingredient.id !== "water");
+  const visibleKegs = visibleKegsInput;
   const proofCount = countVendorMappingsByName(visibleIngredients, "Proof");
   const ohlqCount = countVendorMappingsByName(visibleIngredients, "OHLQ");
+  const kegOverrides = countKegPriceOverrides();
+  const kegTrackedValue = sum(visibleKegs.map((item) => getKegPrice(item)));
 
   ingredientSummary.innerHTML = `
-    <h2>Ingredient pricing</h2>
+    <h2>Pricing</h2>
     <div class="summary-line"><span>Unique ingredients</span><strong>${visibleIngredients.length}</strong></div>
     <div class="summary-line"><span>With bottle overrides</span><strong>${countOverrides()}</strong></div>
     <div class="summary-line"><span>Mapped to vendors</span><strong>${countVendorMappings(visibleIngredients)}</strong></div>
     <div class="summary-line"><span>Proof mapped</span><strong>${proofCount}</strong></div>
     <div class="summary-line"><span>OHLQ mapped</span><strong>${ohlqCount}</strong></div>
+    <div class="summary-line"><span>Beer kegs tracked</span><strong>${visibleKegs.length}</strong></div>
+    <div class="summary-line"><span>Keg overrides</span><strong>${kegOverrides}</strong></div>
+    <div class="summary-line"><span>Keg catalog value</span><strong>${money(kegTrackedValue)}</strong></div>
     <div class="summary-line"><span>Total ounces tracked</span><strong>${formatNumber(sum(visibleIngredients.map((item) => item.totalOz)))}</strong></div>
     <div class="summary-line"><span>Estimated catalog cost</span><strong>${money(sum(visibleIngredients.map((item) => getCatalogCost(item))))}</strong></div>
     <div class="sync-panel">
@@ -549,6 +673,9 @@ function renderKegLevels() {
   const totalTaps = kegWallItems.length;
   const cocktailCount = kegWallItems.filter((item) => normalizeTitle(item.type) === "cocktail").length;
   const shotCount = kegWallItems.filter((item) => normalizeTitle(item.type) === "shots").length;
+  const liveCount = kegWallItems.filter((item) => getKegLiveRow(item)).length;
+  const reorderCount = kegWallItems.filter((item) => getKegNeed(item) > 0).length;
+  const currentInventoryValue = sum(kegWallItems.map((item) => getKegCurrentValue(item, getKegLiveRow(item))));
 
   kegSummary.innerHTML = `
     <h2>Keg Levels</h2>
@@ -556,14 +683,208 @@ function renderKegLevels() {
     <div class="summary-line"><span>Walls tracked</span><strong>${wallNames.length}</strong></div>
     <div class="summary-line"><span>Cocktail taps</span><strong>${cocktailCount}</strong></div>
     <div class="summary-line"><span>Shot lines</span><strong>${shotCount}</strong></div>
+    <div class="summary-line"><span>Live levels found</span><strong>${liveCount}</strong></div>
+    <div class="summary-line"><span>Kegs below par</span><strong>${reorderCount}</strong></div>
+    <div class="summary-line"><span>Current line value</span><strong>${money(currentInventoryValue)}</strong></div>
+    <div class="sync-panel">
+      <div class="sync-actions">
+        <button class="primary-button" id="refresh-keg-levels" type="button"${kegSyncLoading || kegConfigUpdateRunning ? " disabled" : ""}>${kegSyncLoading ? "Refreshing..." : "Refresh keg levels"}</button>
+        <button class="ghost-button" id="send-keg-config-update" type="button"${kegSyncLoading || kegConfigUpdateRunning ? " disabled" : ""}>${kegConfigUpdateRunning ? "Sending..." : "Send config update"}</button>
+      </div>
+      <p class="sync-copy">Live keg levels come from the local Pour My Beer server. Straight-liquor taps show current ounces, and the rest show fill percentages. On-hand and par values are saved in this browser.</p>
+      <p class="sync-status">${escapeHtml(kegSyncMessage)}${kegUpdatedAt ? ` Last updated ${escapeHtml(formatUpdatedAt(kegUpdatedAt))}.` : ""}</p>
+    </div>
   `;
 
   kegWalls.innerHTML = wallNames
     .map((wallName) => renderKegWallBlock(wallName, kegWallItems.filter((item) => item.wall === wallName)))
     .join("");
+
+  bindKegLevelEvents();
+}
+
+function renderWeeklyUsage() {
+  if (!weeklyUsageSummary || !weeklyUsageTable || !weeklyUsageHead) return;
+
+  const searchTerm = weeklyUsageSearch?.value.trim().toLowerCase() || "";
+  const visibleItems = weeklyUsageItems.filter((item) => {
+    if (!searchTerm) return true;
+    const haystack = `${item.tapNumber} ${item.wall} ${item.type} ${item.name}`.toLowerCase();
+    return haystack.includes(searchTerm);
+  });
+
+  const latestLabel = weeklyUsageItems[0]?.history?.[0]?.label || "Latest week";
+  const trackedWeeks = visibleItems.map((item) => item.history.length).filter(Boolean);
+  const shotRows = visibleItems.filter((item) => item.isLiquorShot).length;
+  const kegRows = visibleItems.filter((item) => !item.isLiquorShot).length;
+  const averageWeeks = trackedWeeks.length ? sum(trackedWeeks) / trackedWeeks.length : 0;
+  const lastWeekLabel = weeklyUsageItems[0]?.history?.[0]?.label || "";
+  const historyHeaders = weeklyUsageShowMore
+    ? getWeeklyUsageHistoryHeaders(visibleItems, lastWeekLabel)
+    : [];
+
+  if (weeklyUsageToggleButton) {
+    weeklyUsageToggleButton.textContent = weeklyUsageShowMore ? "Show less" : "Show more";
+  }
+  if (weeklyUsageSaveButton) {
+    weeklyUsageSaveButton.textContent = "Save this week";
+  }
+
+  weeklyUsageSummary.innerHTML = `
+    <h2>Weekly Usage</h2>
+    <div class="summary-line"><span>Rows loaded</span><strong>${visibleItems.length}</strong></div>
+    <div class="summary-line"><span>Shot taps</span><strong>${shotRows}</strong></div>
+    <div class="summary-line"><span>Beer / cocktail taps</span><strong>${kegRows}</strong></div>
+    <div class="summary-line"><span>Latest history week</span><strong>${escapeHtml(latestLabel)}</strong></div>
+    <div class="summary-line"><span>Avg weeks tracked</span><strong>${trackedWeeks.length ? formatNumber(averageWeeks) : "0"}</strong></div>
+    <p class="sync-copy">The current CSV is now loaded from <code>public/data/weekly-usage-history.csv</code>. Edit <strong>This week</strong>, then use <strong>Save this week</strong> to move those numbers into history and clear the editable column. Use <strong>${weeklyUsageShowMore ? "Show less" : "Show more"}</strong> to expand the older weekly columns to the right.</p>
+  `;
+
+  weeklyUsageHead.innerHTML = `
+    <tr>
+      <th>Tap #</th>
+      <th>Item</th>
+      <th>Avg</th>
+      <th>This week</th>
+      <th>Last week</th>
+      ${historyHeaders.map((label) => `<th class="weekly-usage-week">${formatWeeklyUsageHeader(label)}</th>`).join("")}
+    </tr>
+  `;
+
+  weeklyUsageTable.innerHTML = visibleItems
+    .map((item) => {
+      const lastWeek = item.history[0]?.value;
+      const currentWeekValue = getWeeklyUsageCurrentDisplay(item);
+      const historyCells = historyHeaders
+        .map((label) => {
+          const match = item.history.find((entry) => entry.label === label);
+          return `<td class="weekly-usage-week">${escapeHtml(formatUsageDisplay(match?.value, item.displayUnit))}</td>`;
+        })
+        .join("");
+      return `
+        <tr>
+          <td>${item.tapNumber || "-"}</td>
+          <td><strong>${escapeHtml(item.name)}</strong></td>
+          <td>${escapeHtml(formatUsageDisplay(item.average, item.displayUnit))}</td>
+          <td><input class="inventory-input weekly-usage-input" data-weekly-usage-id="${escapeHtml(item.id)}" type="text" inputmode="decimal" value="${escapeHtml(currentWeekValue)}" aria-label="This week for ${escapeHtml(item.name)}"></td>
+          <td>${escapeHtml(formatUsageDisplay(lastWeek, item.displayUnit))}</td>
+          ${historyCells}
+        </tr>
+      `;
+    })
+    .join("") || `<tr><td colspan="${5 + historyHeaders.length}" class="empty-state">No weekly usage rows match that search.</td></tr>`;
+
+  bindWeeklyUsageEvents();
+}
+
+function getWeeklyUsageHistoryHeaders(sourceItems, excludedLabel = "") {
+  const labels = [];
+  sourceItems.forEach((item) => {
+    item.history.forEach((entry) => {
+      if (entry.label === excludedLabel) return;
+      if (!labels.includes(entry.label)) labels.push(entry.label);
+    });
+  });
+  return labels;
+}
+
+function formatWeeklyUsageHeader(label) {
+  const cleaned = clean(label).replace(/\s+/g, " ");
+  const parts = cleaned.split(/\s*-\s*/);
+  if (parts.length >= 2) {
+    return `<span class="weekly-usage-week-label"><span>${escapeHtml(parts[0])}</span><span>${escapeHtml(parts.slice(1).join(" - "))}</span></span>`;
+  }
+  return `<span class="weekly-usage-week-label"><span>${escapeHtml(cleaned)}</span></span>`;
+}
+
+function bindWeeklyUsageEvents() {
+  document.querySelectorAll(".weekly-usage-input").forEach((input) => {
+    input.addEventListener("focus", () => input.select());
+    input.addEventListener("input", () => {
+      const id = input.dataset.weeklyUsageId;
+      if (!id) return;
+      weeklyUsageCurrentOverrides[id] = input.value;
+      saveWeeklyUsageCurrentOverrides();
+    });
+    input.addEventListener("blur", () => {
+      const id = input.dataset.weeklyUsageId;
+      if (!id) return;
+      const item = weeklyUsageItems.find((entry) => entry.id === id);
+      const normalized = normalizeWeeklyUsageInputValue(input.value, item?.displayUnit);
+      if (normalized) {
+        weeklyUsageCurrentOverrides[id] = normalized;
+      } else {
+        delete weeklyUsageCurrentOverrides[id];
+      }
+      saveWeeklyUsageCurrentOverrides();
+      input.value = getWeeklyUsageCurrentDisplay(item);
+    });
+  });
+}
+
+function getWeeklyUsageCurrentDisplay(item) {
+  if (!item) return "";
+  return clean(weeklyUsageCurrentOverrides[item.id] ?? item.currentDisplayValue ?? "");
+}
+
+function normalizeWeeklyUsageInputValue(value, unit) {
+  const normalized = clean(value);
+  if (!normalized) return "";
+  const number = toNumber(normalized);
+  if (!Number.isFinite(number)) return "";
+  return unit === "oz" ? String(Math.round(number * 10) / 10) : String(Math.round(number * 100) / 100);
+}
+
+function saveWeeklyUsageHistory() {
+  const label = buildWeeklyUsageSaveLabel();
+  let savedCount = 0;
+
+  weeklyUsageItems = weeklyUsageItems.map((item) => {
+    const currentValue = toNumber(getWeeklyUsageCurrentDisplay(item));
+    if (!currentValue) {
+      delete weeklyUsageCurrentOverrides[item.id];
+      return item;
+    }
+
+    const historyEntry = { label, value: currentValue, hasValue: true };
+    const mergedHistory = [historyEntry, ...item.history];
+    weeklyUsageHistoryOverrides[item.id] = mergedHistory;
+    delete weeklyUsageCurrentOverrides[item.id];
+    savedCount += 1;
+
+    return {
+      ...item,
+      history: mergedHistory,
+      average: calculateAverage(mergedHistory.map((entry) => entry.value)),
+      currentDisplayValue: "",
+    };
+  });
+
+  saveWeeklyUsageCurrentOverrides();
+  saveWeeklyUsageHistoryOverrides();
+  renderWeeklyUsage();
+
+  if (weeklyUsageSaveButton) {
+    weeklyUsageSaveButton.textContent = savedCount ? `Saved ${savedCount}` : "Nothing to save";
+    setTimeout(() => {
+      if (weeklyUsageSaveButton) weeklyUsageSaveButton.textContent = "Save this week";
+    }, 1800);
+  }
+}
+
+function buildWeeklyUsageSaveLabel() {
+  const now = new Date();
+  const day = now.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diffToMonday);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return `${monday.getMonth() + 1}/${monday.getDate()}/${String(monday.getFullYear()).slice(-2)} - ${sunday.getMonth() + 1}/${sunday.getDate()}/${String(sunday.getFullYear()).slice(-2)}`;
 }
 
 function renderKegWallBlock(wallName, items) {
+  const belowParCount = items.filter((item) => getKegNeed(item) > 0).length;
   return `
     <section class="keg-wall-card">
       <div class="keg-wall-card__header">
@@ -571,7 +892,10 @@ function renderKegWallBlock(wallName, items) {
           <p class="eyebrow">Tap wall</p>
           <h2>${escapeHtml(wallName)}</h2>
         </div>
-        <strong>${items.length} taps</strong>
+        <div class="keg-wall-card__meta">
+          <strong>${items.length} taps</strong>
+          <span class="keg-wall-card__badge">${belowParCount} below par</span>
+        </div>
       </div>
       <div class="inventory-table-wrap">
         <table class="inventory-table keg-table">
@@ -580,24 +904,404 @@ function renderKegWallBlock(wallName, items) {
               <th>Tap #</th>
               <th>Type</th>
               <th>Brand</th>
+              <th>Current level</th>
+              <th>Current value</th>
+              <th>On hand kegs</th>
+              <th>Par kegs</th>
+              <th>Need</th>
             </tr>
           </thead>
           <tbody>
             ${items
-              .map(
-                (item) => `
-                  <tr>
+              .map((item) => {
+                const liveRow = getKegLiveRow(item);
+                const onHand = getKegOnHandDisplay(item);
+                const par = getKegParDisplay(item);
+                const need = getKegNeed(item);
+                const currentValue = getKegCurrentValue(item, liveRow);
+                const rowTypeClass = getKegRowTypeClass(item);
+                return `
+                  <tr class="${rowTypeClass}">
                     <td>${item.tapNumber}</td>
                     <td>${escapeHtml(item.type)}</td>
                     <td><strong>${escapeHtml(item.brand)}</strong></td>
-                  </tr>`,
-              )
+                    <td class="keg-level-cell ${getKegLevelClass(liveRow?.fillLevelPercent)}">${formatKegCurrentLevel(item, liveRow)}</td>
+                    <td class="keg-value-cell">${currentValue > 0 ? money(currentValue) : '<span class="inventory-order-zero">-</span>'}</td>
+                    <td><input class="inventory-input keg-input" data-keg-field="onHand" data-keg-key="${escapeHtml(getKegItemKey(item))}" type="number" min="0" step="1" inputmode="numeric" value="${escapeHtml(onHand)}" placeholder="0"></td>
+                    <td><input class="inventory-input keg-input keg-input--par" data-keg-field="par" data-keg-key="${escapeHtml(getKegItemKey(item))}" type="number" min="0" step="1" inputmode="numeric" value="${escapeHtml(par)}" placeholder="0"></td>
+                    <td class="keg-need-cell">${need > 0 ? `<span class="inventory-order-value">${formatNumber(need)}</span>` : `<span class="inventory-order-zero">0</span>`}</td>
+                  </tr>`;
+              })
               .join("")}
           </tbody>
         </table>
       </div>
     </section>
   `;
+}
+
+function bindKegLevelEvents() {
+  document.querySelector("#refresh-keg-levels")?.addEventListener("click", () => {
+    runKegLevelSync();
+  });
+  document.querySelector("#send-keg-config-update")?.addEventListener("click", () => {
+    runKegConfigUpdate();
+  });
+
+  document.querySelectorAll(".keg-input").forEach((input) => {
+    input.addEventListener("input", (event) => {
+      const target = event.currentTarget;
+      const key = target.dataset.kegKey;
+      const field = target.dataset.kegField;
+      if (!key || !field) return;
+
+      const nextValue = target.value;
+      if (field === "onHand") {
+        if (nextValue) {
+          kegOnHandOverrides[key] = nextValue;
+        } else {
+          delete kegOnHandOverrides[key];
+        }
+        saveKegOnHandOverrides();
+      }
+
+      if (field === "par") {
+        if (nextValue) {
+          kegParOverrides[key] = nextValue;
+        } else {
+          delete kegParOverrides[key];
+        }
+        saveKegParOverrides();
+      }
+
+      renderKegLevels();
+    });
+  });
+}
+
+function handleEnterKeyNavigation(event) {
+  if (event.key !== "Enter" || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
+
+  const active = event.target;
+  if (!(active instanceof HTMLElement)) return;
+  if (!isNavigableEditable(active)) return;
+
+  event.preventDefault();
+
+  const nextInTable = getNextEditableInTable(active);
+  if (nextInTable) {
+    focusEditable(nextInTable);
+    return;
+  }
+
+  const nextGlobal = getNextEditableInScope(active);
+  if (nextGlobal) {
+    focusEditable(nextGlobal);
+  }
+}
+
+function isNavigableEditable(element) {
+  if (!element.matches("input, select, textarea")) return false;
+  if (element.matches('[type="hidden"], [type="search"]')) return false;
+  if (element.hasAttribute("disabled") || element.hasAttribute("readonly")) return false;
+  return element.offsetParent !== null;
+}
+
+function getEditableElements(scope) {
+  return [...scope.querySelectorAll('input:not([type="hidden"]):not([type="search"]):not([disabled]):not([readonly]), select:not([disabled]), textarea:not([disabled]):not([readonly])')]
+    .filter((element) => element.offsetParent !== null);
+}
+
+function getNextEditableInTable(active) {
+  const cell = active.closest("td, th");
+  const row = active.closest("tr");
+  const table = active.closest("table");
+  if (!cell || !row || !table) return null;
+
+  const cellIndex = [...row.children].indexOf(cell);
+  if (cellIndex < 0) return null;
+
+  const rows = [...table.querySelectorAll("tbody tr")];
+  const rowIndex = rows.indexOf(row);
+  if (rowIndex < 0) return null;
+
+  for (let index = rowIndex + 1; index < rows.length; index += 1) {
+    const nextRow = rows[index];
+    const nextCell = nextRow.children[cellIndex];
+    if (!nextCell) continue;
+    const nextEditable = getEditableElements(nextCell)[0];
+    if (nextEditable) return nextEditable;
+  }
+
+  return null;
+}
+
+function getNextEditableInScope(active) {
+  const scope = active.closest("form, .panel, body") || document.body;
+  const editables = getEditableElements(scope);
+  const currentIndex = editables.indexOf(active);
+  if (currentIndex < 0) return null;
+  return editables[currentIndex + 1] || null;
+}
+
+function focusEditable(element) {
+  element.focus();
+  if (typeof element.select === "function" && element.matches('input:not([type="number"]), textarea')) {
+    element.select();
+  }
+}
+
+async function runKegLevelSync() {
+  kegSyncLoading = true;
+  kegSyncMessage = "Checking Pour My Beer for live keg levels...";
+  renderKegLevels();
+
+  try {
+    const response = await fetch("/api/keg-levels");
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result?.error || "Could not load keg levels.");
+    }
+
+    kegLiveLevels = buildKegLiveLevelMap(result.items || []);
+    kegDeviceLevels = buildKegDeviceLevelsMap(result.deviceLevels || {});
+    kegTemplateAssignments = buildKegTemplateAssignments();
+    kegUpdatedAt = result.updatedAt || new Date().toISOString();
+    kegSyncMessage = `Found live levels for ${result.items?.length || 0} products.`;
+  } catch (error) {
+    kegSyncMessage = error.message || "Could not load live keg levels.";
+  } finally {
+    kegSyncLoading = false;
+    renderKegLevels();
+  }
+}
+
+async function runKegConfigUpdate() {
+  kegConfigUpdateRunning = true;
+  kegSyncMessage = "Sending config update to Pour My Beer...";
+  renderKegLevels();
+
+  try {
+    const response = await fetch("/api/keg-config-update", {
+      method: "POST",
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result?.error || "Could not send config update.");
+    }
+
+    kegSyncMessage = result.message || "Configuration update sent.";
+  } catch (error) {
+    kegSyncMessage = error.message || "Could not send config update.";
+  } finally {
+    kegConfigUpdateRunning = false;
+    renderKegLevels();
+  }
+}
+
+function getKegItemKey(item) {
+  return item.id || slugify(`${item.wall}-${item.tapNumber}-${item.brand}`);
+}
+
+function getKegOnHandDisplay(item) {
+  return String(kegOnHandOverrides[getKegItemKey(item)] ?? "");
+}
+
+function getKegParDisplay(item) {
+  return String(kegParOverrides[getKegItemKey(item)] ?? "");
+}
+
+function getKegNeed(item) {
+  const onHand = toNumber(getKegOnHandDisplay(item));
+  const par = toNumber(getKegParDisplay(item));
+  if (!par) return 0;
+  return Math.max(0, Math.round(par - onHand));
+}
+
+function getKegLiveRow(item) {
+  return kegTemplateAssignments.get(getKegItemKey(item)) || null;
+}
+
+function normalizeKegProductName(value) {
+  return clean(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[’']/g, "")
+    .replace(/\)\s*(\d)\s*$/g, " $1")
+    .replace(/([A-Za-z])(\d)$/g, "$1 $2")
+    .replace(/[()]/g, " ")
+    .replace(/\b(cognac|rum|tequila|vodka|whiskey|bourbon|beer|lager|blonde|ipa|wheat|import|stout|sour|cider|seltzer|seasonal|strong ale|shots|cocktail)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function buildKegLiveLevelMap(items) {
+  const map = new Map();
+
+  items.forEach((item) => {
+    const aliases = getKegNameAliases(item.name);
+    aliases.forEach((alias) => {
+      if (alias && !map.has(alias)) {
+        map.set(alias, item);
+      }
+    });
+  });
+
+  return map;
+}
+
+function buildKegDeviceLevelsMap(rawDeviceLevels) {
+  return new Map(
+    Object.entries(rawDeviceLevels).map(([deviceId, levels]) => [
+      String(deviceId),
+      Array.isArray(levels) ? levels.slice().sort((a, b) => a.lineNum - b.lineNum) : [],
+    ]),
+  );
+}
+
+function buildKegTemplateAssignments() {
+  const matchedRows = kegWallItems
+    .map((item) => {
+      const matchedProduct = getNamedKegProduct(item);
+      return matchedProduct ? { item, matchedProduct } : null;
+    })
+    .filter(Boolean);
+
+  const byDevice = new Map();
+  matchedRows.forEach((entry) => {
+    const deviceId = String(entry.matchedProduct.deviceId || "");
+    if (!deviceId) return;
+    if (!byDevice.has(deviceId)) byDevice.set(deviceId, []);
+    byDevice.get(deviceId).push(entry);
+  });
+
+  const assignments = new Map();
+  byDevice.forEach((entries, deviceId) => {
+    const levels = kegDeviceLevels.get(deviceId) || [];
+    const orderedEntries = entries
+      .slice()
+      .sort((a, b) => b.item.tapNumber - a.item.tapNumber);
+
+    orderedEntries.forEach((entry, index) => {
+      const level = levels[index] || null;
+      assignments.set(getKegItemKey(entry.item), {
+        ...entry.matchedProduct,
+        fillLevelPercent: level?.fillLevelPercent ?? null,
+        rawPercent: level?.rawPercent ?? entry.matchedProduct.rawPercent ?? null,
+        rawKegSize: level?.rawKegSize ?? entry.matchedProduct.rawKegSize ?? null,
+        rawKegSizeDp: level?.rawKegSizeDp ?? entry.matchedProduct.rawKegSizeDp ?? null,
+        volumeUnit: entry.matchedProduct.volumeUnit || "",
+        volumeUnitDp: entry.matchedProduct.volumeUnitDp ?? 0,
+        lineNum: level?.lineNum ?? entry.matchedProduct.lineNum,
+      });
+    });
+  });
+
+  return assignments;
+}
+
+function getNamedKegProduct(item) {
+  const normalized = normalizeKegProductName(item.brand);
+  return kegLiveLevels.get(normalized) || null;
+}
+
+function getKegNameAliases(name) {
+  const raw = clean(name);
+  const aliases = new Set();
+  const normalized = normalizeKegProductName(raw);
+  if (normalized) aliases.add(normalized);
+
+  const withoutWallNumber = raw.replace(/\s+\d+$/, "").trim();
+  const normalizedWithoutWall = normalizeKegProductName(withoutWallNumber);
+  if (normalizedWithoutWall) aliases.add(normalizedWithoutWall);
+
+  const withoutParenthetical = raw.replace(/\(([^)]+)\)/g, " $1 ").trim();
+  const normalizedWithoutParen = normalizeKegProductName(withoutParenthetical);
+  if (normalizedWithoutParen) aliases.add(normalizedWithoutParen);
+
+  const compact = normalizeKegProductName(
+    raw.replace(/\(([^)]+)\)/g, " ").replace(/\s+\d+$/, "").trim(),
+  );
+  if (compact) aliases.add(compact);
+
+  if (/gin\s*&?\s*juice/i.test(raw) && /bombay sapphire/i.test(raw)) {
+    aliases.add(normalizeKegProductName(raw.replace(/bombay sapphire/gi, "bombay")));
+  }
+
+  if (/gin\s*&?\s*juice/i.test(raw) && /\bbombay\b/i.test(raw)) {
+    aliases.add(normalizeKegProductName(raw.replace(/\bbombay\b/gi, "bombay sapphire")));
+  }
+
+  return [...aliases];
+}
+
+function isLiquorOunceTap(tapNumber) {
+  return (tapNumber >= 1 && tapNumber <= 20) || (tapNumber >= 83 && tapNumber <= 92);
+}
+
+function getKegCurrentLevelOz(liveRow) {
+  if (!liveRow) return null;
+  const rawPercent = toNumber(liveRow.rawPercent);
+  const rawKegSize = toNumber(liveRow.rawKegSize);
+  if (!rawPercent || !rawKegSize) return null;
+
+  const assumedFullOunces = rawKegSize <= 500 ? rawKegSize / 10 : rawKegSize;
+  const currentOunces = (rawPercent / 10000) * assumedFullOunces;
+  return Number.isFinite(currentOunces) ? currentOunces : null;
+}
+
+function formatKegCurrentLevel(item, liveRow) {
+  if (!liveRow) return "—";
+  if (isLiquorOunceTap(toNumber(item?.tapNumber))) {
+    const currentOunces = getKegCurrentLevelOz(liveRow);
+    return Number.isFinite(currentOunces) ? `${formatNumber(currentOunces)} oz` : "—";
+  }
+  return formatKegLevelPercent(liveRow.fillLevelPercent);
+}
+
+function getKegCurrentFraction(item, liveRow) {
+  if (!liveRow) return 0;
+  if (isLiquorOunceTap(toNumber(item?.tapNumber))) {
+    const currentOunces = getKegCurrentLevelOz(liveRow);
+    const rawKegSize = toNumber(liveRow.rawKegSize);
+    const fullOunces = rawKegSize <= 500 ? rawKegSize / 10 : rawKegSize;
+    return currentOunces && fullOunces ? currentOunces / fullOunces : 0;
+  }
+  const percent = toNumber(liveRow.fillLevelPercent);
+  return percent > 0 ? percent / 100 : 0;
+}
+
+function getKegCurrentValue(item, liveRow) {
+  const pricingItem = findKegPricingItem(item.brand);
+  if (!pricingItem) return 0;
+  const kegPrice = getKegPrice(pricingItem);
+  const fraction = getKegCurrentFraction(item, liveRow);
+  if (!kegPrice || !fraction) return 0;
+  return kegPrice * fraction;
+}
+
+function findKegPricingItem(name) {
+  const key = getKegPricingKey(name);
+  return kegPricingItems.find((entry) => entry.id === key) || null;
+}
+
+function getKegRowTypeClass(item) {
+  if (isLiquorOunceTap(toNumber(item.tapNumber))) return "keg-row--liquor";
+  if (normalizeTitle(item.type) === "cocktail") return "keg-row--cocktail";
+  return "keg-row--beer";
+}
+
+function formatKegLevelPercent(value) {
+  if (!Number.isFinite(value)) return "—";
+  return `${formatNumber(value)}%`;
+}
+
+function getKegLevelClass(value) {
+  if (!Number.isFinite(value)) return "keg-level-unknown";
+  if (value <= 15) return "keg-level-critical";
+  if (value <= 30) return "keg-level-low";
+  return "keg-level-ok";
 }
 
 function renderInventorySummary(visibleItems, reorderItems) {
@@ -1042,6 +1746,30 @@ function saveIngredientOverride(id, bottleOz, bottlePrice) {
     priceOverrides[id] = nextOverride;
   }
   saveOverrides();
+  render();
+}
+
+function saveKegPriceOverride(id, kegOz, kegPrice) {
+  const existingOverride = kegPriceOverrides[id] || {};
+  const nextKegPrice = toNumber(kegPrice);
+  const previousKegPrice = toNumber(existingOverride.kegPrice);
+  const didPriceChange = nextKegPrice > 0 && previousKegPrice > 0 && Math.abs(nextKegPrice - previousKegPrice) > 0.001;
+  const nextOverride = {
+    ...existingOverride,
+    kegOz,
+    kegPrice,
+    updatedAt: new Date().toISOString(),
+    previousKegPrice: didPriceChange ? String(previousKegPrice) : existingOverride.previousKegPrice || "",
+    previousUpdatedAt: didPriceChange ? existingOverride.updatedAt || "" : existingOverride.previousUpdatedAt || "",
+  };
+
+  if (!nextOverride.kegOz && !nextOverride.kegPrice) {
+    delete kegPriceOverrides[id];
+  } else {
+    kegPriceOverrides[id] = nextOverride;
+  }
+
+  saveKegPriceOverrides();
   render();
 }
 
@@ -1618,6 +2346,86 @@ function getCatalogCost(ingredient) {
   return getCatalogUnitCost(ingredient) * ingredient.totalOz;
 }
 
+function buildKegPricingCatalog(sourceKegWallItems) {
+  const byId = new Map();
+
+  sourceKegWallItems
+    .filter((item) => item.tapNumber >= 21 && item.tapNumber <= 46)
+    .forEach((item) => {
+      const id = getKegPricingKey(item.brand);
+      const existing = byId.get(id);
+      const tapLabel = `${item.wall} ${item.tapNumber}`;
+
+      if (!existing) {
+        byId.set(id, {
+          id,
+          name: getKegDisplayName(item.brand),
+          tapNumber: item.tapNumber,
+          wall: item.wall,
+          type: item.type,
+          kegOz: getDefaultKegSizeOz(item),
+          vendor: getKegVendorLabel(item),
+          sourceNames: [item.brand],
+          sourceTaps: [tapLabel],
+          sourceTypes: [item.type],
+        });
+        return;
+      }
+
+      if (!existing.sourceNames.includes(item.brand)) existing.sourceNames.push(item.brand);
+      if (!existing.sourceTaps.includes(tapLabel)) existing.sourceTaps.push(tapLabel);
+      if (!existing.sourceTypes.includes(item.type)) existing.sourceTypes.push(item.type);
+      if (!existing.tapNumber || item.tapNumber < existing.tapNumber) {
+        existing.tapNumber = item.tapNumber;
+        existing.wall = item.wall;
+      }
+    });
+
+  return [...byId.values()]
+    .map((item) => ({
+      ...item,
+      tapSummary: item.sourceTaps.join(", "),
+      typeSummary: [...new Set(item.sourceTypes)].join(", "),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function getDefaultKegSizeOz(item) {
+  const liveRow = getKegLiveRow(item);
+  const rawKegSize = toNumber(liveRow?.rawKegSize);
+  if (rawKegSize > 500) return rawKegSize;
+  return 1984;
+}
+
+function getKegVendorLabel(item) {
+  return KEG_VENDOR_MAPPINGS[getKegPricingKey(item?.brand || item?.name || "")] || "Needs mapping";
+}
+
+function getKegPricingKey(value) {
+  return slugify(getKegDisplayName(value));
+}
+
+function getKegDisplayName(value) {
+  return clean(value).replace(/\s+[12]$/, "").trim();
+}
+
+function getKegCatalogUnitCost(item) {
+  const override = kegPriceOverrides[item.id];
+  const kegOz = toNumber(override?.kegOz) || toNumber(item.kegOz);
+  const kegPrice = toNumber(override?.kegPrice);
+  if (kegOz && kegPrice) return kegPrice / kegOz;
+  return 0;
+}
+
+function getKegPrice(item) {
+  const override = kegPriceOverrides[item.id];
+  const explicitPrice = toNumber(override?.kegPrice);
+  if (explicitPrice > 0) return explicitPrice;
+  const unitCost = getKegCatalogUnitCost(item);
+  const kegOz = toNumber(override?.kegOz) || toNumber(item.kegOz);
+  return unitCost && kegOz ? unitCost * kegOz : 0;
+}
+
 function getIngredientBottleCost(ingredient) {
   const override = priceOverrides[ingredient.id];
   const overrideBottlePrice = toNumber(override?.bottlePrice);
@@ -1636,12 +2444,38 @@ function countOverrides() {
   }).length;
 }
 
+function countKegPriceOverrides() {
+  return Object.keys(kegPriceOverrides).filter((key) => {
+    const override = kegPriceOverrides[key];
+    return toNumber(override?.kegOz) && toNumber(override?.kegPrice);
+  }).length;
+}
+
 function countVendorMappings(sourceIngredients = ingredients) {
   return sourceIngredients.filter((ingredient) => ingredient.vendorProduct).length;
 }
 
 function countVendorMappingsByName(sourceIngredients, vendorName) {
   return sourceIngredients.filter((ingredient) => ingredient.vendorProduct?.vendor === vendorName).length;
+}
+
+function groupKegPricingItemsForDisplay(sourceItems) {
+  const grouped = new Map();
+
+  sourceItems.forEach((item) => {
+    const vendorName = item.vendor || "Needs mapping";
+    if (!grouped.has(vendorName)) {
+      grouped.set(vendorName, []);
+    }
+    grouped.get(vendorName).push(item);
+  });
+
+  return ["Heidelberg", "Bonbright", "Needs mapping"]
+    .map((groupName) => [
+      groupName,
+      (grouped.get(groupName) || []).slice().sort((a, b) => a.name.localeCompare(b.name)),
+    ])
+    .filter(([, items]) => items.length);
 }
 
 function groupIngredientsForDisplay(sourceIngredients) {
@@ -1748,14 +2582,14 @@ function parseInventory(rows) {
       id,
       name: normalizedName,
       group,
-      allowsDecimal: normalizedName === "Sweet and Sour",
+      allowsDecimal: normalizedName === "Sour Mix",
       sourceSection: currentSection,
       onHandDisplay,
       baseUnitCost: unitCost,
       unitCost,
       parDisplay,
       note,
-      excludeFromOrderList: normalizedName === "Sweet and Sour",
+      excludeFromOrderList: normalizedName === "Sour Mix",
       excludeFromInventoryValue: normalizedName === "Non Alcoholic Beer",
     };
 
@@ -1794,6 +2628,7 @@ function parseKegLevels(rows) {
     if (!type || !brand) return;
 
     items.push({
+      id: slugify(`${currentWall}-${tapNumber}-${brand}`),
       tapNumber,
       type,
       brand,
@@ -1802,6 +2637,77 @@ function parseKegLevels(rows) {
   });
 
   return items.sort((a, b) => a.tapNumber - b.tapNumber);
+}
+
+function parseWeeklyUsage(rows) {
+  const headerRow = rows[0] || [];
+  const historyColumns = headerRow
+    .map((value, index) => ({ label: clean(value).replace(/\s+/g, " "), index }))
+    .filter((entry) => entry.index >= 6 && isWeeklyHistoryHeader(entry.label));
+
+  return rows
+    .slice(2)
+    .map((row) => {
+      const tapNumber = toNumber(row[1]);
+      const name = clean(row[2]);
+      if (!tapNumber || !name || /^do not erase/i.test(name)) return null;
+
+      const kegInfo = kegWallItems.find((item) => item.tapNumber === tapNumber);
+      const rawOz = toNumber(row[3]);
+      const currentEquivalentRaw = clean(row[4]);
+      const currentEquivalent = toNumber(row[4]);
+      const averageRaw = clean(row[5]);
+      const average = toNumber(row[5]);
+      const history = historyColumns
+        .map((column) => {
+          const rawValue = clean(row[column.index]);
+          return {
+            label: column.label,
+            value: toNumber(row[column.index]),
+            hasValue: rawValue !== "",
+          };
+        })
+        .filter((entry) => entry.hasValue);
+
+      return {
+        id: slugify(`${tapNumber}-${name}`),
+        tapNumber,
+        name,
+        wall: kegInfo?.wall || "",
+        type: kegInfo?.type || "",
+        rawOz,
+        currentEquivalent,
+        average: averageRaw !== "" ? average : calculateAverage(history.map((entry) => entry.value)),
+        history: [...(weeklyUsageHistoryOverrides[slugify(`${tapNumber}-${name}`)] || []), ...history],
+        isLiquorShot: isLiquorOunceTap(tapNumber),
+        displayUnit: currentEquivalentRaw !== "" ? "kegs" : "oz",
+        currentDisplayValue: currentEquivalentRaw !== "" ? currentEquivalent : rawOz,
+      };
+    })
+    .map((item) => item ? ({
+      ...item,
+      average: calculateAverage(item.history.map((entry) => entry.value)),
+    }) : null)
+    .filter(Boolean)
+    .sort((a, b) => a.tapNumber - b.tapNumber);
+}
+
+function isWeeklyHistoryHeader(label) {
+  const normalized = clean(label).toLowerCase();
+  return Boolean(normalized)
+    && normalized.includes("/")
+    && normalized.includes("-")
+    && !normalized.includes("avg");
+}
+
+function calculateAverage(values) {
+  const numbers = values.filter((value) => Number.isFinite(value));
+  return numbers.length ? sum(numbers) / numbers.length : 0;
+}
+
+function formatUsageDisplay(value, unit) {
+  if (!Number.isFinite(value)) return "—";
+  return `${formatNumber(value)} ${unit}`;
 }
 
 function ensureInventoryPlaceholder(items, config) {
@@ -1880,7 +2786,7 @@ function inferCategory(title) {
   if (match) return clean(match[1]).replace("Tequilla", "Tequila");
   if (/margarita|marg|senorita/i.test(title)) return "Tequila";
   if (/martini|cran|lemonade|palmer|blue dot/i.test(title)) return "Vodka";
-  if (/whiskey|jack|old fashioned|apple jack|smash|sour/i.test(title)) return "Whiskey";
+  if (/whiskey|jack|old fashioned|apple jack|smash|sour|on par tee/i.test(title)) return "Whiskey";
   if (/rum|captain/i.test(title)) return "Rum";
   return "Other";
 }
@@ -1941,7 +2847,8 @@ function normalizeIngredientAlias(name) {
   if (/strawberry lemonade$/.test(normalized)) return "Strawberry Lemonade";
   if (/^cranberry juice$/.test(normalized) || /^cranberry$/.test(normalized)) return "Cranberry Juice";
   if (/^simple syrup$/.test(normalized)) return "Simple Syrup";
-  if (/^sour mix$/.test(normalized) || /^sweet and sour$/.test(normalized)) return "Sweet and Sour";
+  if (/^sour mix$/.test(normalized) || /^sweet and sour$/.test(normalized)) return "Sour Mix";
+  if (/^blue dot juice$/.test(normalized) || /^blue dot$/.test(normalized)) return "Blue Dot Juice";
   if (/^lime juice$/.test(normalized)) return "Lime Juice";
   if (/^lemon juice$/.test(normalized)) return "Lemon Juice";
   if (/^creme de cocao$/.test(normalized)) return "Creme de Cacao";
@@ -1967,7 +2874,7 @@ function getIngredientGroup(name) {
   ) {
     return "Proof";
   }
-  if (normalized === "blue Dot Juice".toLowerCase()) return "Made In House";
+  if (normalized === "blue dot juice") return "Made In House";
   if (normalized === "simple syrup" || normalized.includes("syrup")) return "Made In House";
   if (
     normalized.includes("juice") ||
@@ -2143,6 +3050,84 @@ function getIngredientAddAmount(rawValue) {
   return "";
 }
 
+function getRecipeCardAddAmount(ingredient) {
+  const normalizedName = normalizeIngredientAlias(ingredient?.name || "");
+  const rawValue = clean(ingredient?.raw);
+  const gallonDisplayName = getRecipeCardGallonDisplayName(normalizedName, rawValue);
+
+  const explicitGallonMatch = rawValue.match(/(\d+(?:\.\d+)?)\s*gallons?/i);
+  if (explicitGallonMatch && gallonDisplayName) {
+    const gallons = toNumber(explicitGallonMatch[1]);
+    if (gallons > 0) {
+      return `${formatNumber(gallons)} ${gallons === 1 ? "gallon" : "gallons"}`;
+    }
+  }
+
+  if (gallonDisplayName && ingredient?.oz) {
+    const gallons = ingredient.oz / 128;
+    if (Number.isFinite(gallons) && gallons > 0) {
+      return `${formatNumber(gallons)} ${gallons === 1 ? "gallon" : "gallons"}`;
+    }
+  }
+
+  const baseAmount = getIngredientAddAmount(ingredient?.raw);
+  if (!baseAmount) return "";
+  if (/\(([^)]+)\)/.test(baseAmount)) return baseAmount;
+
+  const packageSizeLabel = getRecipeCardPackageSizeLabel(ingredient);
+  if (!packageSizeLabel) return baseAmount;
+  if (!/\bbottles?\b/i.test(baseAmount)) return baseAmount;
+
+  return `${baseAmount} (${packageSizeLabel})`;
+}
+
+function getRecipeCardGallonDisplayName(normalizedName, rawValue) {
+  const normalizedRaw = clean(rawValue).toLowerCase();
+  const gallonDisplayNames = new Set(["cranberry juice", "lemonade", "strawberry lemonade", "simple syrup", "sour mix", "blue dot juice"]);
+  if (gallonDisplayNames.has(normalizedName)) return normalizedName;
+  if (normalizedRaw.includes("strawberry lemonade")) return "strawberry lemonade";
+  if (normalizedRaw.includes("gallon lemonade") || /\blemonade\b/.test(normalizedRaw)) return "lemonade";
+  if (normalizedRaw.includes("cranberry")) return "cranberry juice";
+  if (normalizedRaw.includes("simple syrup")) return "simple syrup";
+  if (normalizedRaw.includes("sour mix") || normalizedRaw.includes("sweet and sour")) return "sour mix";
+  if (normalizedRaw.includes("blue dot juice") || normalizedRaw.includes("blue dot")) return "blue dot juice";
+  return "";
+}
+
+function getRecipeCardPackageSizeLabel(ingredient) {
+  const explicitSizeOz = toNumber(ingredient?.packageSizeOz);
+  if (explicitSizeOz) return formatPackageSizeFromOz(explicitSizeOz);
+
+  const resolvedId = getResolvedIngredientId(ingredient);
+  const overrideBottleOz = toNumber(priceOverrides[resolvedId]?.bottleOz);
+  if (overrideBottleOz) return formatPackageSizeFromOz(overrideBottleOz);
+
+  const mappedBottleOz = toNumber(getVendorMapping(resolvedId)?.bottleOz);
+  if (mappedBottleOz) return formatPackageSizeFromOz(mappedBottleOz);
+
+  return "";
+}
+
+function formatPackageSizeFromOz(sizeOz) {
+  if (!sizeOz) return "";
+
+  const roundedMl = Math.round(sizeOz * 29.5735);
+  const literSizes = [
+    { ml: 1750, label: "1.75L" },
+    { ml: 1000, label: "1L" },
+    { ml: 750, label: "750mL" },
+    { ml: 375, label: "375mL" },
+  ];
+
+  const literMatch = literSizes.find((item) => Math.abs(roundedMl - item.ml) <= 20);
+  if (literMatch) return literMatch.label;
+
+  if (Math.abs(sizeOz - 16) <= 0.2) return "16oz";
+  if (Math.abs(sizeOz - 128) <= 1) return "1 gallon";
+
+  return `${formatNumber(sizeOz)} oz`;
+}
+
 function isMetricLabel(value) {
   return /^(total price|total oz|total price per oz|price we're charging|profit per oz|profit margin|cost for|how many oz per shot)/i.test(value);
 }
@@ -2162,6 +3147,18 @@ function loadOverrides() {
 
 function saveOverrides() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(priceOverrides));
+}
+
+function loadKegPriceOverrides() {
+  try {
+    return JSON.parse(localStorage.getItem(KEG_PRICE_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveKegPriceOverrides() {
+  localStorage.setItem(KEG_PRICE_STORAGE_KEY, JSON.stringify(kegPriceOverrides));
 }
 
 function loadChargeOverrides() {
@@ -2244,6 +3241,54 @@ function loadInventoryHistory() {
   }
 }
 
+function loadWeeklyUsageCurrentOverrides() {
+  try {
+    return JSON.parse(localStorage.getItem(WEEKLY_USAGE_CURRENT_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveWeeklyUsageCurrentOverrides() {
+  localStorage.setItem(WEEKLY_USAGE_CURRENT_STORAGE_KEY, JSON.stringify(weeklyUsageCurrentOverrides));
+}
+
+function loadWeeklyUsageHistoryOverrides() {
+  try {
+    return JSON.parse(localStorage.getItem(WEEKLY_USAGE_HISTORY_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveWeeklyUsageHistoryOverrides() {
+  localStorage.setItem(WEEKLY_USAGE_HISTORY_STORAGE_KEY, JSON.stringify(weeklyUsageHistoryOverrides));
+}
+
+function loadKegOnHandOverrides() {
+  try {
+    return JSON.parse(localStorage.getItem(KEG_ON_HAND_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveKegOnHandOverrides() {
+  localStorage.setItem(KEG_ON_HAND_STORAGE_KEY, JSON.stringify(kegOnHandOverrides));
+}
+
+function loadKegParOverrides() {
+  try {
+    return JSON.parse(localStorage.getItem(KEG_PAR_STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveKegParOverrides() {
+  localStorage.setItem(KEG_PAR_STORAGE_KEY, JSON.stringify(kegParOverrides));
+}
+
 function saveInventoryHistory() {
   localStorage.setItem(INVENTORY_HISTORY_STORAGE_KEY, JSON.stringify(inventoryHistory));
 }
@@ -2310,13 +3355,13 @@ function formatUpdatedAt(value) {
 }
 
 function getPreviousPriceNote(override) {
-  const currentBottlePrice = toNumber(override?.bottlePrice);
-  const previousBottlePrice = toNumber(override?.previousBottlePrice);
-  if (!currentBottlePrice || !previousBottlePrice) return "";
-  if (Math.abs(currentBottlePrice - previousBottlePrice) <= 0.001) return "";
+  const currentPrice = toNumber(override?.bottlePrice) || toNumber(override?.kegPrice);
+  const previousPrice = toNumber(override?.previousBottlePrice) || toNumber(override?.previousKegPrice);
+  if (!currentPrice || !previousPrice) return "";
+  if (Math.abs(currentPrice - previousPrice) <= 0.001) return "";
 
   const previousDate = override?.previousUpdatedAt ? formatUpdatedAt(override.previousUpdatedAt) : "";
-  return previousDate ? `Was ${money(previousBottlePrice)} before ${previousDate}` : `Was ${money(previousBottlePrice)}`;
+  return previousDate ? `Was ${money(previousPrice)} before ${previousDate}` : `Was ${money(previousPrice)}`;
 }
 
 function formatInventorySnapshotLabel(value) {

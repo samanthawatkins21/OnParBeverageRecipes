@@ -51,8 +51,9 @@ export default function DashboardPage() {
           <button className="tab-button is-active" data-tab="recipes" type="button">Recipes</button>
           <button className="tab-button" data-tab="pricing" type="button">Tap Wall Pricing</button>
           <button className="tab-button" data-tab="keg-levels" type="button">Keg Levels</button>
-          <button className="tab-button" data-tab="ingredients" type="button">Cocktail Ingredients</button>
+          <button className="tab-button" data-tab="ingredients" type="button">Pricing</button>
           <button className="tab-button" data-tab="inventory" type="button">Inventory</button>
+          <button className="tab-button" data-tab="weekly-usage" type="button">Weekly Usage</button>
           <button className="tab-button" data-tab="add" type="button">Add Recipe</button>
           <button className="tab-button" data-tab="old" type="button">Old Recipes</button>
         </div>
@@ -175,28 +176,64 @@ export default function DashboardPage() {
         <section className="panel" id="ingredients-panel" aria-labelledby="ingredients-tab">
           <div className="toolbar">
             <label className="search-field">
-              <span>Find ingredient</span>
-              <input id="ingredient-search" type="search" placeholder="Search ingredient catalog..." />
+              <span>Find pricing item</span>
+              <input id="ingredient-search" type="search" placeholder="Search ingredient or keg pricing..." />
             </label>
             <button className="ghost-button" id="clear-prices" type="button">Clear bottle overrides</button>
           </div>
 
           <div className="ingredient-layout">
             <aside className="ingredient-summary" id="ingredient-summary"></aside>
-            <div className="ingredient-table-wrap">
-              <table className="ingredient-table">
-                <thead>
-                  <tr>
-                    <th>Ingredient</th>
-                    <th>Current $/oz</th>
-                    <th>Bottle oz</th>
-                    <th>Bottle price</th>
-                    <th>Last updated</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody id="ingredient-table"></tbody>
-              </table>
+            <div className="pricing-sections">
+              <section className="inventory-block">
+                <div className="inventory-block__header">
+                  <div>
+                    <p className="eyebrow">Cocktail Ingredients</p>
+                    <h2>Ingredient Pricing</h2>
+                  </div>
+                </div>
+                <div className="ingredient-table-wrap">
+                  <table className="ingredient-table">
+                    <thead>
+                      <tr>
+                        <th>Ingredient</th>
+                        <th>Current $/oz</th>
+                        <th>Bottle oz</th>
+                        <th>Bottle price</th>
+                        <th>Last updated</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="ingredient-table"></tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section className="inventory-block">
+                <div className="inventory-block__header pricing-section-header">
+                  <div>
+                    <p className="eyebrow">Beer Kegs</p>
+                    <h2>Keg Pricing</h2>
+                  </div>
+                  <button className="ghost-button" id="clear-keg-prices" type="button">Clear keg overrides</button>
+                </div>
+                <div className="ingredient-table-wrap">
+                  <table className="ingredient-table">
+                    <thead>
+                      <tr>
+                        <th>Keg</th>
+                        <th>Vendor</th>
+                        <th>Current $/oz</th>
+                        <th>Keg oz</th>
+                        <th>Keg price</th>
+                        <th>Last updated</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody id="keg-pricing-table"></tbody>
+                  </table>
+                </div>
+              </section>
             </div>
           </div>
         </section>
@@ -269,6 +306,38 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="inventory-history-list" id="inventory-history-list"></div>
+              </section>
+            </div>
+          </div>
+        </section>
+
+        <section className="panel" id="weekly-usage-panel" aria-labelledby="weekly-usage-tab">
+          <div className="toolbar">
+            <label className="search-field">
+              <span>Find tap or product</span>
+              <input id="weekly-usage-search" type="search" placeholder="Search tap, wall, liquor, beer, cocktail..." />
+            </label>
+            <button className="primary-button" id="save-weekly-usage" type="button">Save this week</button>
+            <button className="ghost-button" id="toggle-weekly-usage-history" type="button">Show more</button>
+          </div>
+
+          <div className="inventory-layout">
+            <aside className="weekly-usage-summary" id="weekly-usage-summary"></aside>
+            <div className="inventory-sections">
+              <section className="inventory-block">
+                <div className="inventory-block__header">
+                  <div>
+                    <p className="eyebrow">Historical Usage</p>
+                    <h2>Weekly Usage Tracker</h2>
+                    <p className="formula-note inventory-note">This pulls in the current usage CSV history so we can keep working toward better par levels.</p>
+                  </div>
+                </div>
+                <div className="inventory-table-wrap">
+                  <table className="inventory-table weekly-usage-table">
+                    <thead id="weekly-usage-head"></thead>
+                    <tbody id="weekly-usage-table"></tbody>
+                  </table>
+                </div>
               </section>
             </div>
           </div>
