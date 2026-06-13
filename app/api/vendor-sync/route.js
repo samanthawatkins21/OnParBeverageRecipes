@@ -107,6 +107,7 @@ async function syncVendorWithProvi(items, context) {
 
       updates.push({
         id: item.id,
+        priceType: item.priceType || "ingredient",
         bottlePrice,
         bottleOz,
         updatedAt: new Date().toISOString(),
@@ -138,6 +139,9 @@ async function syncVendorWithProvi(items, context) {
 async function fetchMatchedProviProduct(item, sessionContext, searchCache, distributorHints = []) {
   const product = item?.vendorProduct || {};
   const queries = getSearchQueries(product, item);
+  const activeDistributorHints = Array.isArray(product.distributorHints) && product.distributorHints.length
+    ? product.distributorHints
+    : distributorHints;
 
   for (const query of queries) {
     const cacheKey = `${sessionContext.retailerContext}::${query}`;
@@ -148,7 +152,7 @@ async function fetchMatchedProviProduct(item, sessionContext, searchCache, distr
       searchCache.set(cacheKey, results);
     }
 
-    const match = findMatchingProviProductLine(results, item, distributorHints);
+    const match = findMatchingProviProductLine(results, item, activeDistributorHints);
     if (match) return match;
   }
 
@@ -338,7 +342,7 @@ async function loadProviSessionContext() {
   } catch (error) {
     if (error?.code === "ENOENT") {
       throw new Error(
-        "This sync currently uses the saved Provi session from your local computer, so it works on localhost but not on Vercel yet.",
+        "Provi setup is missing on this computer. Run `npm run provi:session`, then `npm run provi:capture`, before syncing prices.",
       );
     }
     throw error;

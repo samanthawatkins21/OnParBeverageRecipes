@@ -3,6 +3,7 @@ const NEW_COCKTAILS_CSV_PATH = "./data/new-cocktails.csv";
 const INVENTORY_CSV_PATH = "./data/inventory-2026-06-01.csv";
 const KEG_LEVELS_CSV_PATH = "./data/keg-levels-template.csv";
 const WEEKLY_USAGE_CSV_PATH = "./data/weekly-usage-history.csv";
+const WEEKLY_USAGE_EXTRA_CSV_PATH = "./data/weekly-usage-history-extra.csv";
 const STORAGE_KEY = "cocktail-dashboard-ingredient-prices";
 const CHARGE_STORAGE_KEY = "cocktail-dashboard-charge-prices";
 const CUSTOM_RECIPE_STORAGE_KEY = "cocktail-dashboard-custom-recipes";
@@ -47,6 +48,10 @@ const KEG_VENDOR_MAPPINGS = {
   "garage-beer": "Bonbright",
   guinness: "Bonbright",
   "voodoo-ranger-ipa": "Bonbright",
+};
+const KEG_PROVI_DISTRIBUTOR_HINTS = {
+  Heidelberg: ["Heidelberg", "Heidelberg Distributing", "Heidelberg Distributing Company"],
+  Bonbright: ["Bonbright", "Bonbright Distributors", "Bonbright Distributing"],
 };
 const INVENTORY_CABINET_ORDER = [
   "Bulleit Bourbon",
@@ -193,7 +198,6 @@ const kegWalls = document.querySelector("#keg-walls");
 const weeklyUsageSearch = document.querySelector("#weekly-usage-search");
 const weeklyUsageHead = document.querySelector("#weekly-usage-head");
 const weeklyUsageSaveButton = document.querySelector("#save-weekly-usage");
-const weeklyUsageToggleButton = document.querySelector("#toggle-weekly-usage-history");
 const weeklyUsageSummary = document.querySelector("#weekly-usage-summary");
 const weeklyUsageTable = document.querySelector("#weekly-usage-table");
 const clearPricesButton = document.querySelector("#clear-prices");
@@ -212,7 +216,6 @@ let ingredients = [];
 let inventoryItems = [];
 let kegWallItems = [];
 let weeklyUsageItems = [];
-let weeklyUsageShowMore = false;
 let weeklyUsageCurrentOverrides = loadWeeklyUsageCurrentOverrides();
 let weeklyUsageHistoryOverrides = loadWeeklyUsageHistoryOverrides();
 let kegPricingItems = [];
@@ -243,12 +246,13 @@ let kegTemplateAssignments = new Map();
 init();
 
 async function init() {
-  const [csv, newCocktailsCsv, inventoryCsv, kegLevelsCsv, weeklyUsageCsv] = await Promise.all([
+  const [csv, newCocktailsCsv, inventoryCsv, kegLevelsCsv, weeklyUsageCsv, weeklyUsageExtraCsv] = await Promise.all([
     fetchCsv(CSV_PATH),
     fetchCsv(NEW_COCKTAILS_CSV_PATH),
     fetchCsv(INVENTORY_CSV_PATH),
     fetchOptionalCsv(KEG_LEVELS_CSV_PATH),
     fetchOptionalCsv(WEEKLY_USAGE_CSV_PATH),
+    fetchOptionalCsv(WEEKLY_USAGE_EXTRA_CSV_PATH),
   ]);
 
   recipes = [
@@ -261,6 +265,9 @@ async function init() {
   kegWallItems = kegLevelsCsv ? parseKegLevels(parseCsv(kegLevelsCsv)) : [];
   kegPricingItems = buildKegPricingCatalog(kegWallItems);
   weeklyUsageItems = weeklyUsageCsv ? parseWeeklyUsage(parseCsv(weeklyUsageCsv)) : [];
+  if (weeklyUsageExtraCsv) {
+    weeklyUsageItems = mergeWeeklyUsageExtraHistory(weeklyUsageItems, parseWeeklyUsageExtraHistory(parseCsv(weeklyUsageExtraCsv)));
+  }
   hydrateCategoryFilter(recipes);
   bindEvents();
   addIngredientRow();
@@ -283,10 +290,6 @@ function bindEvents() {
   inventorySearch.addEventListener("input", renderInventory);
   weeklyUsageSearch?.addEventListener("input", renderWeeklyUsage);
   weeklyUsageSaveButton?.addEventListener("click", saveWeeklyUsageHistory);
-  weeklyUsageToggleButton?.addEventListener("click", () => {
-    weeklyUsageShowMore = !weeklyUsageShowMore;
-    renderWeeklyUsage();
-  });
   recipeForm.addEventListener("submit", addCustomRecipe);
   addIngredientRowButton.addEventListener("click", addIngredientRow);
   cancelEditButton.addEventListener("click", resetRecipeForm);
@@ -540,7 +543,7 @@ function renderIngredients() {
     return haystack.includes(searchTerm);
   });
   const visibleKegs = kegPricingItems.filter((item) => {
-    const haystack = `${item.name} ${item.type} ${item.wall} ${item.tapNumber} ${item.vendor}`.toLowerCase();
+    const haystack = `${item.name} ${item.type} ${item.typeSummary} ${item.wall} ${item.tapNumber} ${item.tapSummary} ${item.vendor}`.toLowerCase();
     return haystack.includes(searchTerm);
   });
   const groupedIngredients = groupIngredientsForDisplay(visibleIngredients);
@@ -597,8 +600,9 @@ function renderIngredients() {
           <strong>${escapeHtml(item.name)}</strong>
           <span class="table-note table-note--accent">${escapeHtml(item.tapSummary)}</span>
           <span class="table-note">${escapeHtml(item.typeSummary)}</span>
+          ${item.vendorProduct ? `<span class="table-note table-note--accent">Provi mapped</span><span class="table-note">${escapeHtml(item.vendorProduct.productName)}</span>` : ""}
         </td>
-        <td>${vendorName === "Needs mapping" ? `<span class="table-note">${escapeHtml(vendorName)}</span>` : escapeHtml(vendorName)}</td>
+        <td>${vendorName === "Needs mapping" ? `<span class="table-note">${escapeHtml(vendorName)}</span>` : `${escapeHtml(vendorName)}<span class="table-note">via Provi</span>`}</td>
         <td>${money(currentUnitCost)}</td>
         <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override.kegOz ?? "")}" placeholder="${escapeHtml(formatNumber(item.kegOz))}" aria-label="Keg ounces for ${escapeHtml(item.name)}"></td>
         <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override.kegPrice ?? "")}" aria-label="Keg price for ${escapeHtml(item.name)}"></td>
@@ -619,24 +623,15 @@ function renderIngredientSummary(visibleIngredientsInput = ingredients.filter((i
   const visibleKegs = visibleKegsInput;
   const proofCount = countVendorMappingsByName(visibleIngredients, "Proof");
   const ohlqCount = countVendorMappingsByName(visibleIngredients, "OHLQ");
+  const proviKegCount = visibleKegs.filter((item) => item.vendorProduct?.syncVendor === "Provi").length;
   const kegOverrides = countKegPriceOverrides();
   const kegTrackedValue = sum(visibleKegs.map((item) => getKegPrice(item)));
 
   ingredientSummary.innerHTML = `
     <h2>Pricing</h2>
-    <div class="summary-line"><span>Unique ingredients</span><strong>${visibleIngredients.length}</strong></div>
-    <div class="summary-line"><span>With bottle overrides</span><strong>${countOverrides()}</strong></div>
-    <div class="summary-line"><span>Mapped to vendors</span><strong>${countVendorMappings(visibleIngredients)}</strong></div>
-    <div class="summary-line"><span>Proof mapped</span><strong>${proofCount}</strong></div>
-    <div class="summary-line"><span>OHLQ mapped</span><strong>${ohlqCount}</strong></div>
-    <div class="summary-line"><span>Beer kegs tracked</span><strong>${visibleKegs.length}</strong></div>
-    <div class="summary-line"><span>Keg overrides</span><strong>${kegOverrides}</strong></div>
-    <div class="summary-line"><span>Keg catalog value</span><strong>${money(kegTrackedValue)}</strong></div>
-    <div class="summary-line"><span>Total ounces tracked</span><strong>${formatNumber(sum(visibleIngredients.map((item) => item.totalOz)))}</strong></div>
-    <div class="summary-line"><span>Estimated catalog cost</span><strong>${money(sum(visibleIngredients.map((item) => getCatalogCost(item))))}</strong></div>
     <div class="sync-panel">
       <h3>Vendor Sync</h3>
-      <p class="sync-copy">This button uses the server-side sync route. It will update mapped ingredients automatically when a vendor connection is available, and report what is blocked when it is not.</p>
+      <p class="sync-copy">Updates mapped ingredients and beer kegs through the available vendor connections.</p>
       <label class="sync-field">
         <span>Vendor scope</span>
         <select id="vendor-sync-scope">
@@ -650,6 +645,17 @@ function renderIngredientSummary(visibleIngredientsInput = ingredients.filter((i
       </div>
       <p class="sync-status">${escapeHtml(vendorSyncMessage)}</p>
     </div>
+    <div class="summary-line"><span>Unique ingredients</span><strong>${visibleIngredients.length}</strong></div>
+    <div class="summary-line"><span>With bottle overrides</span><strong>${countOverrides()}</strong></div>
+    <div class="summary-line"><span>Mapped to vendors</span><strong>${countVendorMappings(visibleIngredients)}</strong></div>
+    <div class="summary-line"><span>Proof mapped</span><strong>${proofCount}</strong></div>
+    <div class="summary-line"><span>OHLQ mapped</span><strong>${ohlqCount}</strong></div>
+    <div class="summary-line"><span>Beer kegs tracked</span><strong>${visibleKegs.length}</strong></div>
+    <div class="summary-line"><span>Kegs via Provi</span><strong>${proviKegCount}</strong></div>
+    <div class="summary-line"><span>Keg overrides</span><strong>${kegOverrides}</strong></div>
+    <div class="summary-line"><span>Keg catalog value</span><strong>${money(kegTrackedValue)}</strong></div>
+    <div class="summary-line"><span>Total ounces tracked</span><strong>${formatNumber(sum(visibleIngredients.map((item) => item.totalOz)))}</strong></div>
+    <div class="summary-line"><span>Estimated catalog cost</span><strong>${money(sum(visibleIngredients.map((item) => getCatalogCost(item))))}</strong></div>
   `;
 
   bindIngredientSummaryEvents();
@@ -718,43 +724,60 @@ function renderWeeklyUsage() {
   const shotRows = visibleItems.filter((item) => item.isLiquorShot).length;
   const kegRows = visibleItems.filter((item) => !item.isLiquorShot).length;
   const averageWeeks = trackedWeeks.length ? sum(trackedWeeks) / trackedWeeks.length : 0;
-  const lastWeekLabel = weeklyUsageItems[0]?.history?.[0]?.label || "";
-  const historyHeaders = weeklyUsageShowMore
-    ? getWeeklyUsageHistoryHeaders(visibleItems, lastWeekLabel)
-    : [];
-
-  if (weeklyUsageToggleButton) {
-    weeklyUsageToggleButton.textContent = weeklyUsageShowMore ? "Show less" : "Show more";
+  const historyHeaders = getWeeklyUsageHistoryHeaders(visibleItems);
+  const weeklyUsageTableElement = weeklyUsageHead.closest("table");
+  if (weeklyUsageTableElement) {
+    const tableWidth = `${650 + (historyHeaders.length * 112)}px`;
+    weeklyUsageTableElement.style.width = tableWidth;
+    weeklyUsageTableElement.style.minWidth = tableWidth;
+    weeklyUsageTableElement.querySelector("colgroup")?.remove();
+    weeklyUsageTableElement.insertAdjacentHTML("afterbegin", `
+      <colgroup>
+        <col style="width: 70px;">
+        <col style="width: 340px;">
+        <col style="width: 110px;">
+        <col style="width: 130px;">
+        ${historyHeaders.map(() => '<col style="width: 112px;">').join("")}
+      </colgroup>
+    `);
   }
+
   if (weeklyUsageSaveButton) {
     weeklyUsageSaveButton.textContent = "Save this week";
   }
 
+  const filledThisWeekRows = visibleItems.filter((item) => toNumber(getWeeklyUsageCurrentDisplay(item)) > 0).length;
+
   weeklyUsageSummary.innerHTML = `
     <h2>Weekly Usage</h2>
-    <div class="summary-line"><span>Rows loaded</span><strong>${visibleItems.length}</strong></div>
-    <div class="summary-line"><span>Shot taps</span><strong>${shotRows}</strong></div>
-    <div class="summary-line"><span>Beer / cocktail taps</span><strong>${kegRows}</strong></div>
-    <div class="summary-line"><span>Latest history week</span><strong>${escapeHtml(latestLabel)}</strong></div>
+    <div class="weekly-usage-summary__hero">
+      <span>Latest history week</span>
+      <strong>${escapeHtml(latestLabel)}</strong>
+    </div>
+    <div class="weekly-usage-summary__grid">
+      <div><strong>${visibleItems.length}</strong><span>Rows</span></div>
+      <div><strong>${filledThisWeekRows}</strong><span>This week</span></div>
+      <div><strong>${shotRows}</strong><span>Shot taps</span></div>
+      <div><strong>${kegRows}</strong><span>Pour wall</span></div>
+    </div>
     <div class="summary-line"><span>Avg weeks tracked</span><strong>${trackedWeeks.length ? formatNumber(averageWeeks) : "0"}</strong></div>
-    <p class="sync-copy">The current CSV is now loaded from <code>public/data/weekly-usage-history.csv</code>. Edit <strong>This week</strong>, then use <strong>Save this week</strong> to move those numbers into history and clear the editable column. Use <strong>${weeklyUsageShowMore ? "Show less" : "Show more"}</strong> to expand the older weekly columns to the right.</p>
   `;
 
   weeklyUsageHead.innerHTML = `
     <tr>
       <th>Tap #</th>
-      <th>Item</th>
+      <th>Product</th>
       <th>Avg</th>
       <th>This week</th>
-      <th>Last week</th>
       ${historyHeaders.map((label) => `<th class="weekly-usage-week">${formatWeeklyUsageHeader(label)}</th>`).join("")}
     </tr>
   `;
 
   weeklyUsageTable.innerHTML = visibleItems
     .map((item) => {
-      const lastWeek = item.history[0]?.value;
       const currentWeekValue = getWeeklyUsageCurrentDisplay(item);
+      const rowClass = item.isLiquorShot ? "weekly-usage-row--shot" : "weekly-usage-row--pour";
+      const wallLabel = clean(item.wall) || "Unassigned";
       const historyCells = historyHeaders
         .map((label) => {
           const match = item.history.find((entry) => entry.label === label);
@@ -762,37 +785,38 @@ function renderWeeklyUsage() {
         })
         .join("");
       return `
-        <tr>
-          <td>${item.tapNumber || "-"}</td>
-          <td><strong>${escapeHtml(item.name)}</strong></td>
+        <tr class="${rowClass}">
+          <td class="weekly-usage-tap"><span>${item.tapNumber || "-"}</span></td>
+          <td class="weekly-usage-product">
+            <strong>${escapeHtml(item.name)}</strong>
+            <span>${escapeHtml(wallLabel)}</span>
+          </td>
           <td>${escapeHtml(formatUsageDisplay(item.average, item.displayUnit))}</td>
           <td><input class="inventory-input weekly-usage-input" data-weekly-usage-id="${escapeHtml(item.id)}" type="text" inputmode="decimal" value="${escapeHtml(currentWeekValue)}" aria-label="This week for ${escapeHtml(item.name)}"></td>
-          <td>${escapeHtml(formatUsageDisplay(lastWeek, item.displayUnit))}</td>
           ${historyCells}
         </tr>
       `;
     })
-    .join("") || `<tr><td colspan="${5 + historyHeaders.length}" class="empty-state">No weekly usage rows match that search.</td></tr>`;
+    .join("") || `<tr><td colspan="${4 + historyHeaders.length}" class="empty-state">No weekly usage rows match that search.</td></tr>`;
 
   bindWeeklyUsageEvents();
 }
 
-function getWeeklyUsageHistoryHeaders(sourceItems, excludedLabel = "") {
+function getWeeklyUsageHistoryHeaders(sourceItems) {
   const labels = [];
   sourceItems.forEach((item) => {
     item.history.forEach((entry) => {
-      if (entry.label === excludedLabel) return;
       if (!labels.includes(entry.label)) labels.push(entry.label);
     });
   });
-  return labels;
+  return sortWeeklyUsageHistory(labels.map((label) => ({ label, value: 0 }))).map((entry) => entry.label);
 }
 
 function formatWeeklyUsageHeader(label) {
   const cleaned = clean(label).replace(/\s+/g, " ");
   const parts = cleaned.split(/\s*-\s*/);
   if (parts.length >= 2) {
-    return `<span class="weekly-usage-week-label"><span>${escapeHtml(parts[0])}</span><span>${escapeHtml(parts.slice(1).join(" - "))}</span></span>`;
+    return `<span class="weekly-usage-week-label"><span>${escapeHtml(parts[0])}</span><span>- ${escapeHtml(parts.slice(1).join(" - "))}</span></span>`;
   }
   return `<span class="weekly-usage-week-label"><span>${escapeHtml(cleaned)}</span></span>`;
 }
@@ -2350,13 +2374,14 @@ function buildKegPricingCatalog(sourceKegWallItems) {
   const byId = new Map();
 
   sourceKegWallItems
-    .filter((item) => item.tapNumber >= 21 && item.tapNumber <= 46)
+    .filter((item) => isBeerPricingTap(item))
     .forEach((item) => {
       const id = getKegPricingKey(item.brand);
       const existing = byId.get(id);
       const tapLabel = `${item.wall} ${item.tapNumber}`;
 
       if (!existing) {
+        const vendor = getKegVendorLabel(item);
         byId.set(id, {
           id,
           name: getKegDisplayName(item.brand),
@@ -2364,7 +2389,8 @@ function buildKegPricingCatalog(sourceKegWallItems) {
           wall: item.wall,
           type: item.type,
           kegOz: getDefaultKegSizeOz(item),
-          vendor: getKegVendorLabel(item),
+          vendor,
+          vendorProduct: getKegVendorProduct(getKegDisplayName(item.brand), vendor, getDefaultKegSizeOz(item)),
           sourceNames: [item.brand],
           sourceTaps: [tapLabel],
           sourceTypes: [item.type],
@@ -2384,10 +2410,21 @@ function buildKegPricingCatalog(sourceKegWallItems) {
   return [...byId.values()]
     .map((item) => ({
       ...item,
-      tapSummary: item.sourceTaps.join(", "),
+      tapSummary: item.sourceTaps.sort(sortTapLabels).join(", "),
       typeSummary: [...new Set(item.sourceTypes)].join(", "),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function isBeerPricingTap(item) {
+  return (
+    (item.tapNumber >= 21 && item.tapNumber <= 46) ||
+    (item.wall === "Karaoke" && item.tapNumber >= 73 && item.tapNumber <= 82)
+  );
+}
+
+function sortTapLabels(a, b) {
+  return toNumber(a.match(/\d+/)?.[0]) - toNumber(b.match(/\d+/)?.[0]);
 }
 
 function getDefaultKegSizeOz(item) {
@@ -2399,6 +2436,18 @@ function getDefaultKegSizeOz(item) {
 
 function getKegVendorLabel(item) {
   return KEG_VENDOR_MAPPINGS[getKegPricingKey(item?.brand || item?.name || "")] || "Needs mapping";
+}
+
+function getKegVendorProduct(name, vendor, kegOz) {
+  if (!KEG_PROVI_DISTRIBUTOR_HINTS[vendor]) return null;
+  return {
+    vendor,
+    syncVendor: "Provi",
+    productName: name,
+    bottleOz: kegOz,
+    distributorHints: KEG_PROVI_DISTRIBUTOR_HINTS[vendor],
+    searchAliases: [name.replace(/\s+[12]$/, "").trim()],
+  };
 }
 
 function getKegPricingKey(value) {
@@ -2645,7 +2694,7 @@ function parseWeeklyUsage(rows) {
     .map((value, index) => ({ label: clean(value).replace(/\s+/g, " "), index }))
     .filter((entry) => entry.index >= 6 && isWeeklyHistoryHeader(entry.label));
 
-  return rows
+  const parsedItems = rows
     .slice(2)
     .map((row) => {
       const tapNumber = toNumber(row[1]);
@@ -2688,8 +2737,129 @@ function parseWeeklyUsage(rows) {
       ...item,
       average: calculateAverage(item.history.map((entry) => entry.value)),
     }) : null)
-    .filter(Boolean)
-    .sort((a, b) => a.tapNumber - b.tapNumber);
+    .filter(Boolean);
+
+  return mergeWeeklyUsageDuplicates(parsedItems).sort((a, b) => a.tapNumber - b.tapNumber);
+}
+
+function mergeWeeklyUsageDuplicates(items) {
+  const byId = new Map();
+
+  items.forEach((item) => {
+    const existing = byId.get(item.id);
+    if (!existing) {
+      byId.set(item.id, {
+        ...item,
+        history: mergeWeeklyUsageHistory(item.history),
+      });
+      return;
+    }
+
+    existing.rawOz = pickWeeklyUsageValue(existing.rawOz, item.rawOz);
+    existing.currentEquivalent = pickWeeklyUsageValue(existing.currentEquivalent, item.currentEquivalent);
+    existing.currentDisplayValue = pickWeeklyUsageValue(existing.currentDisplayValue, item.currentDisplayValue);
+    existing.history = mergeWeeklyUsageHistory([...existing.history, ...item.history]);
+    existing.average = calculateAverage(existing.history.map((entry) => entry.value));
+  });
+
+  return [...byId.values()].map((item) => ({
+    ...item,
+    average: calculateAverage(item.history.map((entry) => entry.value)),
+  }));
+}
+
+function parseWeeklyUsageExtraHistory(rows) {
+  const headerRow = rows[0] || [];
+  const historyColumns = headerRow
+    .map((value, index) => ({ label: clean(value).replace(/\s+/g, " "), index }))
+    .filter((entry) => entry.index >= 4 && isWeeklyHistoryHeader(entry.label));
+
+  return rows
+    .slice(1)
+    .map((row) => {
+      const tapNumber = toNumber(row[1]);
+      const name = clean(row[2]);
+      if (!tapNumber || !name || /^do not erase/i.test(name)) return null;
+
+      const history = historyColumns
+        .map((column) => {
+          const rawValue = clean(row[column.index]);
+          if (!rawValue || rawValue.startsWith("#")) return null;
+          return {
+            label: column.label,
+            value: toNumber(rawValue),
+            hasValue: true,
+          };
+        })
+        .filter(Boolean);
+
+      return {
+        id: slugify(`${tapNumber}-${name}`),
+        tapNumber,
+        name,
+        nameKey: normalizeWeeklyUsageName(name),
+        history,
+      };
+    })
+    .filter(Boolean);
+}
+
+function mergeWeeklyUsageExtraHistory(items, extraRows) {
+  if (!extraRows.length) return items;
+
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const byTap = new Map(items.map((item) => [String(item.tapNumber), item]));
+  const byName = new Map(items.map((item) => [normalizeWeeklyUsageName(item.name), item]));
+
+  extraRows.forEach((extra) => {
+    const item = byId.get(extra.id) || byTap.get(String(extra.tapNumber)) || byName.get(extra.nameKey);
+    if (!item) return;
+
+    item.history = mergeWeeklyUsageHistory([...extra.history, ...item.history]);
+    item.average = calculateAverage(item.history.map((entry) => entry.value));
+  });
+
+  return items;
+}
+
+function normalizeWeeklyUsageName(value) {
+  return clean(value)
+    .toLowerCase()
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function pickWeeklyUsageValue(primary, fallback) {
+  const primaryNumber = toNumber(primary);
+  const fallbackNumber = toNumber(fallback);
+  if (Number.isFinite(primaryNumber) && primaryNumber > 0) return primaryNumber;
+  if (Number.isFinite(fallbackNumber) && fallbackNumber > 0) return fallbackNumber;
+  return Number.isFinite(primaryNumber) ? primaryNumber : fallbackNumber;
+}
+
+function mergeWeeklyUsageHistory(history) {
+  const byLabel = new Map();
+  history.forEach((entry) => {
+    if (!entry?.label || byLabel.has(entry.label)) return;
+    if (!Number.isFinite(entry.value)) return;
+    byLabel.set(entry.label, entry);
+  });
+  return sortWeeklyUsageHistory([...byLabel.values()]);
+}
+
+function sortWeeklyUsageHistory(history) {
+  return [...history].sort((a, b) => getWeeklyUsageLabelTime(b.label) - getWeeklyUsageLabelTime(a.label));
+}
+
+function getWeeklyUsageLabelTime(label) {
+  const match = clean(label).match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (!match) return 0;
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  const rawYear = Number(match[3]);
+  const year = rawYear < 100 ? 2000 + rawYear : rawYear;
+  return new Date(year, month - 1, day).getTime();
 }
 
 function isWeeklyHistoryHeader(label) {
@@ -2940,9 +3110,26 @@ function bindIngredientSummaryEvents() {
   });
 }
 
-function getVendorMappedIngredients(scope = "all") {
-  return ingredients
+function getVendorMappedItems(scope = "all") {
+  const ingredientItems = ingredients
     .filter((ingredient) => ingredient.id !== "water" && ingredient.vendorProduct)
+    .map((ingredient) => ({
+      id: ingredient.id,
+      name: ingredient.name,
+      priceType: "ingredient",
+      vendorProduct: ingredient.vendorProduct,
+    }));
+
+  const kegItems = kegPricingItems
+    .filter((item) => item.vendorProduct)
+    .map((item) => ({
+      id: item.id,
+      name: item.name,
+      priceType: "keg",
+      vendorProduct: item.vendorProduct,
+    }));
+
+  return [...ingredientItems, ...kegItems]
     .filter((ingredient) => scope === "all" || getVendorSyncName(ingredient.vendorProduct) === scope)
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -2952,9 +3139,9 @@ function getVendorSyncName(vendorProduct) {
 }
 
 async function runVendorSync() {
-  const candidates = getVendorMappedIngredients(vendorSyncScope);
+  const candidates = getVendorMappedItems(vendorSyncScope);
   if (!candidates.length) {
-    vendorSyncMessage = "No mapped ingredients match that vendor scope yet.";
+    vendorSyncMessage = "No mapped pricing items match that vendor scope yet.";
     renderIngredientSummary();
     return;
   }
@@ -2971,11 +3158,12 @@ async function runVendorSync() {
       },
       body: JSON.stringify({
         scope: vendorSyncScope,
-        items: candidates.map((ingredient) => ({
-          id: ingredient.id,
-          name: ingredient.name,
-          vendorProduct: ingredient.vendorProduct,
-          syncVendor: getVendorSyncName(ingredient.vendorProduct),
+        items: candidates.map((item) => ({
+          id: item.id,
+          name: item.name,
+          priceType: item.priceType,
+          vendorProduct: item.vendorProduct,
+          syncVendor: getVendorSyncName(item.vendorProduct),
         })),
       }),
     });
@@ -2988,6 +3176,23 @@ async function runVendorSync() {
     let applied = 0;
     (result.updates || []).forEach((update) => {
       if (!update.id || !Number.isFinite(update.bottleOz) || !Number.isFinite(update.bottlePrice)) return;
+      if (update.priceType === "keg") {
+        const existingOverride = kegPriceOverrides[update.id] || {};
+        const previousKegPrice = toNumber(existingOverride.kegPrice);
+        const nextKegPrice = Number(update.bottlePrice);
+        const didPriceChange = previousKegPrice > 0 && Math.abs(previousKegPrice - nextKegPrice) > 0.001;
+        kegPriceOverrides[update.id] = {
+          ...existingOverride,
+          kegOz: String(update.bottleOz),
+          kegPrice: String(update.bottlePrice),
+          updatedAt: update.updatedAt || new Date().toISOString(),
+          previousKegPrice: didPriceChange ? String(previousKegPrice) : "",
+          previousUpdatedAt: didPriceChange ? existingOverride.updatedAt || "" : "",
+        };
+        applied += 1;
+        return;
+      }
+
       const existingOverride = priceOverrides[update.id] || {};
       const previousBottlePrice = toNumber(existingOverride.bottlePrice);
       const nextBottlePrice = Number(update.bottlePrice);
@@ -3005,13 +3210,18 @@ async function runVendorSync() {
 
     if (applied) {
       saveOverrides();
+      saveKegPriceOverrides();
     }
 
-    const statusNotes = (result.vendorStatuses || [])
+    const vendorStatuses = result.vendorStatuses || [];
+    const statusNotes = vendorStatuses
       .map((status) => `${status.vendor}: ${status.message}`)
       .join(" ");
+    const blockedStatuses = vendorStatuses.filter((status) => ["blocked", "pending"].includes(status.status));
 
-    vendorSyncMessage = `Applied ${applied} price${applied === 1 ? "" : "s"}.${statusNotes ? ` ${statusNotes}` : ""}`;
+    vendorSyncMessage = applied || !blockedStatuses.length
+      ? `Applied ${applied} price${applied === 1 ? "" : "s"}.${statusNotes ? ` ${statusNotes}` : ""}`
+      : statusNotes || "No prices were applied because the selected vendor connection is not ready.";
     render();
   } catch (error) {
     vendorSyncMessage = error.message || "Vendor sync failed.";

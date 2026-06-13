@@ -28,7 +28,7 @@ export default function DashboardPage() {
         <header className="topbar">
           <div>
             <p className="eyebrow">Batch cocktail costing</p>
-            <h1>Cocktail Recipe Dashboard</h1>
+            <h1>Beverage Dashboard</h1>
           </div>
         </header>
         <main>
@@ -45,7 +45,7 @@ export default function DashboardPage() {
       <header className="topbar">
         <div>
           <p className="eyebrow">Batch cocktail costing</p>
-          <h1>Cocktail Recipe Dashboard</h1>
+          <h1>Beverage Dashboard</h1>
         </div>
         <div className="top-actions" aria-label="Dashboard controls">
           <button className="tab-button is-active" data-tab="recipes" type="button">Recipes</button>
@@ -318,7 +318,6 @@ export default function DashboardPage() {
               <input id="weekly-usage-search" type="search" placeholder="Search tap, wall, liquor, beer, cocktail..." />
             </label>
             <button className="primary-button" id="save-weekly-usage" type="button">Save this week</button>
-            <button className="ghost-button" id="toggle-weekly-usage-history" type="button">Show more</button>
           </div>
 
           <div className="inventory-layout">
@@ -329,7 +328,6 @@ export default function DashboardPage() {
                   <div>
                     <p className="eyebrow">Historical Usage</p>
                     <h2>Weekly Usage Tracker</h2>
-                    <p className="formula-note inventory-note">This pulls in the current usage CSV history so we can keep working toward better par levels.</p>
                   </div>
                 </div>
                 <div className="inventory-table-wrap">

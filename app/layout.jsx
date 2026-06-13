@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "On Par Beverage Recipes",
-  description: "Cocktail recipe costing dashboard for On Par.",
+  title: "On Par Beverage Dashboard",
+  description: "Beverage costing and inventory dashboard for On Par.",
 };
 
 export default function RootLayout({ children }) {

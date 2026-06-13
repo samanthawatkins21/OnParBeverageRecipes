@@ -15,6 +15,8 @@ export const preferredProviLocationName = "On Par Entertainment";
 export const alternateProviLocationNames = ["Wild Axe"];
 
 export const chromeExecutableCandidates = [
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  path.join(os.homedir(), "Applications", "Google Chrome.app", "Contents", "MacOS", "Google Chrome"),
   "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
   "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
 ];
