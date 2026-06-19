@@ -595,12 +595,13 @@ function renderKegTapPricingRow(livePrice, kegItem) {
   const chargePerOz = livePrice?.chargePerOz || 0;
   const profitPerOz = chargePerOz && costPerOz ? chargePerOz - costPerOz : 0;
   const margin = chargePerOz ? (profitPerOz / chargePerOz) * 100 : 0;
+  const locationLabel = getLiveTapLocationLabel(livePrice, kegItem);
   const row = document.createElement("tr");
   row.innerHTML = `
     <td>
       <strong>${escapeHtml(livePrice?.name || kegItem.name)}</strong>
       ${livePrice ? `<span class="table-note table-note--accent">Tap ${formatNumber(livePrice.tapPosition)}</span>` : ""}
-      <span class="table-note">${escapeHtml(kegItem.tapSummary || "Beer tap")}</span>
+      <span class="table-note">${escapeHtml(locationLabel)}</span>
     </td>
     <td>${costPerOz ? money(costPerOz) : "-"}</td>
     <td>${chargePerOz ? money(chargePerOz) : "-"}</td>
@@ -610,6 +611,13 @@ function renderKegTapPricingRow(livePrice, kegItem) {
     <td>-</td>
   `;
   return row;
+}
+
+function getLiveTapLocationLabel(livePrice, kegItem) {
+  if (livePrice?.wall && livePrice?.tapPosition) {
+    return `${livePrice.wall} ${formatNumber(livePrice.tapPosition)}`;
+  }
+  return kegItem?.tapSummary || "Beer tap";
 }
 
 function renderIngredientTapPricingRow(livePrice, ingredient) {
