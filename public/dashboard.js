@@ -1474,9 +1474,10 @@ function findKegPricingItem(name) {
   return kegPricingItems.find((entry) => entry.id === key) || null;
 }
 
-function getKegPricingItem(value) {
-  const directMatch = kegPricingItems.find((entry) => entry.id === value);
-  return directMatch || findKegPricingItem(value);
+function getKegPricingItem(idOrName) {
+  const key = String(idOrName || "").trim();
+  if (!key) return null;
+  return kegPricingItems.find((entry) => entry.id === key) || findKegPricingItem(key);
 }
 
 function getKegRowTypeClass(item) {
