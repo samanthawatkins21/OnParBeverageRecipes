@@ -1,9 +1,12 @@
 node_modules/
+.pnpm-store/
 .next/
 .DS_Store
 Thumbs.db
 *.log
+logs/
 
 .vercel
 .env.local
 .env*.local
+.tools/

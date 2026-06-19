@@ -209,3 +209,47 @@ npm.cmd run provi:extract
   - local env values
   - network access to the PMB local IP
   - fresh local login/session capture if browser session files are part of the flow
+
+## New Mac PMB Connectivity Check - 2026-06-19
+
+- New always-on Mac local IP observed as `192.168.10.93`.
+- PMB / TTG server at `http://192.168.10.128:8585` is reachable from this Mac.
+- `/api/authtoken` returned `AUTH_OK` with a 62-character token for client id `910423`.
+- `/api/productlist` worked with the generated bearer token and returned `103` products.
+- `/api/getkeglevels` worked for device `66952915841408`, line `1`.
+- `.env.local` was created locally and is ignored by Git.
+- Still needed on this Mac for normal operation:
+  - install Node.js LTS so `npm run dev` and `npm run build` work outside Codex
+  - install Apple Command Line Tools / Git so repo status and commits work
+  - install and configure `cloudflared` as a persistent service for the Cloudflare tunnel
+  - get the Cloudflare tunnel token or named-tunnel credentials/hostname before making it always-on
+
+## Cloudflare Tunnel - 2026-06-19
+
+- Cloudflare domain: `onparbev.com`.
+- Named tunnel: `onparbev-dashboard`.
+- Tunnel id: `35a2d83d-aa45-4ad0-a1ad-b0735a66fa63`.
+- DNS routes created:
+  - `onparbev.com`
+  - `www.onparbev.com`
+- Public dashboard verified at `https://onparbev.com`.
+- Public keg API verified at `https://onparbev.com/api/keg-levels`.
+- Tunnel routes to the dashboard app on `http://localhost:3000`; it does not expose the PMB server directly.
+- macOS LaunchAgents installed:
+  - `~/Library/LaunchAgents/com.onpar.beverage-dashboard.plist`
+  - `~/Library/LaunchAgents/com.onpar.cloudflared.plist`
+- Runtime service folder is `/Users/onparmarketing/OnParBeverageRecipes-service` because macOS blocked launchd from executing reliably out of Desktop.
+- Service logs live in `/Users/onparmarketing/OnParBeverageRecipes-service/logs`.
+- The Cloudflare cert and tunnel credentials are in `~/.cloudflared` and must stay secret.
+
+## Provi Session Refresh - 2026-06-19
+
+- Fresh Provi browser session saved under `~/.FoodOrderAgent/provi`.
+- Active retailer context captured as `402312`.
+- `.env.local` was updated with `PROVI_COOKIE_HEADER` and `PROVI_RETAILER_CONTEXT` in both:
+  - Desktop working copy
+  - `/Users/onparmarketing/OnParBeverageRecipes-service`
+- Always-on dashboard LaunchAgent was restarted after env update.
+- Public `https://onparbev.com/api/vendor-sync` verified for:
+  - `Provi` scope
+  - `OHLQ` scope
