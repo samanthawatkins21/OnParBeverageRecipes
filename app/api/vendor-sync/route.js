@@ -7,6 +7,9 @@ const PROVI_BASE_URL = "https://app.provi.com";
 const PROVI_CAPTURE_PATH = path.join(os.homedir(), ".FoodOrderAgent", "provi", "captures", "latest-provi-capture.json");
 const PROVI_SESSION_PATH = path.join(os.homedir(), ".FoodOrderAgent", "provi", "provi_session_state.json");
 const STANDARD_BEER_KEG_OZ = 15.5 * 128;
+const KEG_SIZE_OVERRIDES = {
+  "stella-artois": 50 * 33.814,
+};
 
 export async function POST(request) {
   try {
@@ -237,8 +240,10 @@ function selectMatchingProduct(products, item, targetBottleOz) {
   if (!candidates.length) return null;
 
   if (isKegSyncItem(item)) {
-    const expectedKegOz = targetBottleOz || STANDARD_BEER_KEG_OZ;
-    return candidates.find((entry) => isKegPackage(entry) && isRoughlyEqual(entry.bottleOz, expectedKegOz)) || null;
+    const expectedKegOz = getExpectedKegOz(item, targetBottleOz);
+    return candidates.find((entry) => isKegPackage(entry) && isRoughlyEqual(entry.bottleOz, expectedKegOz)) ||
+      candidates.find((entry) => entry.bottleOz >= 500 && isRoughlyEqual(entry.bottleOz, expectedKegOz)) ||
+      null;
   }
 
   const exactByOz = candidates.find((entry) => isRoughlyEqual(entry.bottleOz, targetBottleOz));
@@ -264,6 +269,11 @@ function isKegSyncItem(item) {
 
 function isKegPackage(entry) {
   return /\b(keg|bbl|barrel)\b/i.test(entry.packageText || "");
+}
+
+function getExpectedKegOz(item, fallbackOz = 0) {
+  const key = normalizeName(item?.vendorProduct?.productName || item?.name || "").replace(/\s+/g, "-");
+  return KEG_SIZE_OVERRIDES[key] || fallbackOz || STANDARD_BEER_KEG_OZ;
 }
 
 function getPreferredInventory(product, item) {

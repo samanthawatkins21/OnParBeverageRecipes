@@ -18,6 +18,9 @@ const KEG_PRICE_STORAGE_KEY = "cocktail-dashboard-keg-prices";
 const WEEKLY_USAGE_CURRENT_STORAGE_KEY = "cocktail-dashboard-weekly-usage-current";
 const WEEKLY_USAGE_HISTORY_STORAGE_KEY = "cocktail-dashboard-weekly-usage-history";
 const STANDARD_BEER_KEG_OZ = 15.5 * 128;
+const KEG_SIZE_OVERRIDES = {
+  "stella-artois": 50 * 33.814,
+};
 const KEG_VENDOR_MAPPINGS = {
   "michelob-ultra": "Heidelberg",
   "busch-light": "Heidelberg",
@@ -1777,7 +1780,7 @@ function saveIngredientOverride(id, bottleOz, bottlePrice) {
 
 function saveKegPriceOverride(id, kegOz, kegPrice, item = null) {
   const existingOverride = kegPriceOverrides[id] || {};
-  const nextKegOz = item && isBeerPricingTap(item) ? String(STANDARD_BEER_KEG_OZ) : kegOz;
+  const nextKegOz = item && isBeerPricingTap(item) ? String(getExpectedBeerKegOz(item)) : kegOz;
   const nextKegPrice = toNumber(kegPrice);
   const previousKegPrice = toNumber(existingOverride.kegPrice);
   const didPriceChange = nextKegPrice > 0 && previousKegPrice > 0 && Math.abs(nextKegPrice - previousKegPrice) > 0.001;
@@ -2431,6 +2434,9 @@ function sortTapLabels(a, b) {
 }
 
 function getDefaultKegSizeOz(item) {
+  const overrideKegOz = getKegSizeOverrideOz(item);
+  if (overrideKegOz) return overrideKegOz;
+
   const liveRow = getKegLiveRow(item);
   const rawKegSize = toNumber(liveRow?.rawKegSize);
   if (rawKegSize > 500) return rawKegSize;
@@ -2481,19 +2487,27 @@ function getKegPrice(item) {
 }
 
 function getKegPricingOz(item) {
-  if (item?.priceType === "keg" || isBeerPricingTap(item)) return STANDARD_BEER_KEG_OZ;
+  if (item?.priceType === "keg" || isBeerPricingTap(item)) return getExpectedBeerKegOz(item);
   return toNumber(kegPriceOverrides[item.id]?.kegOz) || toNumber(item.kegOz) || STANDARD_BEER_KEG_OZ;
 }
 
 function getKegOverrideDisplayOz(item, override = {}) {
-  if (isBeerPricingTap(item)) return String(STANDARD_BEER_KEG_OZ);
+  if (isBeerPricingTap(item)) return String(getExpectedBeerKegOz(item));
   return override.kegOz ?? "";
 }
 
 function isStaleSmallBeerKegOverride(item, override = {}) {
   if (!item || !isBeerPricingTap(item)) return false;
   const overrideKegOz = toNumber(override?.kegOz);
-  return overrideKegOz > 0 && !isRoughlyEqual(overrideKegOz, STANDARD_BEER_KEG_OZ);
+  return overrideKegOz > 0 && !isRoughlyEqual(overrideKegOz, getExpectedBeerKegOz(item));
+}
+
+function getExpectedBeerKegOz(item) {
+  return getKegSizeOverrideOz(item) || STANDARD_BEER_KEG_OZ;
+}
+
+function getKegSizeOverrideOz(item) {
+  return KEG_SIZE_OVERRIDES[getKegPricingKey(item?.brand || item?.name || "")] || 0;
 }
 
 function getIngredientBottleCost(ingredient) {
@@ -3204,7 +3218,7 @@ async function runVendorSync() {
         const previousKegPrice = toNumber(existingOverride.kegPrice);
         const nextKegPrice = Number(update.bottlePrice);
         const pricingItem = getKegPricingItem(update.id);
-        const nextKegOz = pricingItem && isBeerPricingTap(pricingItem) ? STANDARD_BEER_KEG_OZ : update.bottleOz;
+        const nextKegOz = pricingItem && isBeerPricingTap(pricingItem) ? getExpectedBeerKegOz(pricingItem) : update.bottleOz;
         const didPriceChange = previousKegPrice > 0 && Math.abs(previousKegPrice - nextKegPrice) > 0.001;
         kegPriceOverrides[update.id] = {
           ...existingOverride,
