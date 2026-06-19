@@ -557,6 +557,7 @@ function renderPricing() {
 function renderTapPricingRow({ livePrice, recipe, kegItem }) {
   if (recipe) return renderRecipeTapPricingRow(livePrice, recipe);
   if (kegItem) return renderKegTapPricingRow(livePrice, kegItem);
+  if (livePrice?.ingredient) return renderIngredientTapPricingRow(livePrice, livePrice.ingredient);
   return renderUnmappedTapPricingRow(livePrice);
 }
 
@@ -600,6 +601,28 @@ function renderKegTapPricingRow(livePrice, kegItem) {
       <strong>${escapeHtml(livePrice?.name || kegItem.name)}</strong>
       ${livePrice ? `<span class="table-note table-note--accent">Tap ${formatNumber(livePrice.tapPosition)}</span>` : ""}
       <span class="table-note">${escapeHtml(kegItem.tapSummary || "Beer tap")}</span>
+    </td>
+    <td>${costPerOz ? money(costPerOz) : "-"}</td>
+    <td>${chargePerOz ? money(chargePerOz) : "-"}</td>
+    <td>${chargePerOz && costPerOz ? money(profitPerOz) : "-"}</td>
+    <td>${chargePerOz && costPerOz ? `${formatNumber(margin)}%` : "-"}</td>
+    <td>-</td>
+    <td>-</td>
+  `;
+  return row;
+}
+
+function renderIngredientTapPricingRow(livePrice, ingredient) {
+  const costPerOz = getCatalogUnitCost(ingredient);
+  const chargePerOz = livePrice?.chargePerOz || 0;
+  const profitPerOz = chargePerOz && costPerOz ? chargePerOz - costPerOz : 0;
+  const margin = chargePerOz ? (profitPerOz / chargePerOz) * 100 : 0;
+  const row = document.createElement("tr");
+  row.innerHTML = `
+    <td>
+      <strong>${escapeHtml(livePrice.name)}</strong>
+      <span class="table-note table-note--accent">Tap ${formatNumber(livePrice.tapPosition)}</span>
+      <span class="table-note">PMB live: ${escapeHtml(ingredient.name)} cost</span>
     </td>
     <td>${costPerOz ? money(costPerOz) : "-"}</td>
     <td>${chargePerOz ? money(chargePerOz) : "-"}</td>
@@ -2453,8 +2476,14 @@ function getLiveTapPricingRows(searchTerm = "") {
       recipe: getRecipeForLiveTapPrice(livePrice),
       kegItem: getKegPricingItemForLiveTapPrice(livePrice),
     }))
+    .map((tapRow) => {
+      if (!tapRow.recipe && !tapRow.kegItem) {
+        tapRow.livePrice.ingredient = getIngredientForLiveTapPrice(tapRow.livePrice);
+      }
+      return tapRow;
+    })
     .filter(({ livePrice, recipe, kegItem }) => {
-      const haystack = `${livePrice.name} ${livePrice.tapPosition} ${recipe?.title || ""} ${kegItem?.name || ""} ${kegItem?.tapSummary || ""}`.toLowerCase();
+      const haystack = `${livePrice.name} ${livePrice.tapPosition} ${recipe?.title || ""} ${kegItem?.name || ""} ${kegItem?.tapSummary || ""} ${livePrice.ingredient?.name || ""}`.toLowerCase();
       return haystack.includes(normalizedSearch);
     })
     .sort((a, b) => toNumber(a.livePrice?.tapPosition) - toNumber(b.livePrice?.tapPosition));
@@ -2487,6 +2516,25 @@ function getRecipeForLiveTapPrice(livePrice) {
   return getActiveRecipes().find((recipe) => {
     const recipeAliases = getTapPriceAliases(recipe.title);
     return aliases.some((alias) => recipeAliases.includes(alias));
+  }) || null;
+}
+
+function getIngredientForLiveTapPrice(livePrice) {
+  if (!livePrice?.name || normalizeTitle(livePrice.type) !== "shots") return null;
+  const candidates = getTapPriceAliases(livePrice.name)
+    .map((alias) => normalizeIngredientAlias(alias))
+    .filter(Boolean);
+
+  return ingredients.find((ingredient) => {
+    const ingredientAliases = [
+      normalizeTapPriceKey(ingredient.name),
+      normalizeTapPriceKey(normalizeIngredientAlias(ingredient.name)),
+    ].filter(Boolean);
+
+    return candidates.some((candidate) => {
+      const candidateKey = normalizeTapPriceKey(candidate);
+      return ingredientAliases.includes(candidateKey);
+    });
   }) || null;
 }
 
@@ -2526,7 +2574,7 @@ function getKegPricingItemForLiveTapPrice(livePrice) {
 }
 
 function getLiveTapWallNumber(name) {
-  return toNumber(String(name || "").match(/\s+([123])\s*$/)?.[1]);
+  return toNumber(String(name || "").match(/\s*([123])\s*$/)?.[1]);
 }
 
 function getTapPriceAliases(value) {
@@ -2537,14 +2585,16 @@ function getTapPriceAliases(value) {
 
 function normalizeTapPriceKey(value) {
   return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/’/g, "'")
     .replace(/&/g, " and ")
-    .replace(/\s+[123]\s*$/g, "")
+    .replace(/\s*[123]\s*$/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\btito s\b/g, "titos")
     .replace(/\bdaniel s\b/g, "daniels")
-    .replace(/\bvodka|whiskey|tequila|rum|gin\b/g, " ")
+    .replace(/\bvodka|whiskey|tequila|rum|gin|bourbon|cognac\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -3328,6 +3378,7 @@ function normalizeIngredientAlias(name) {
   if (/^ket(t)?le one cucumber$/.test(normalized)) return "Ketel One Cucumber Vodka";
   if (/^jose cuervo(\s+silver)?$/.test(normalized)) return "Jose Cuervo Silver";
   if (/^bull?iet$/.test(normalized) || /^bull?iet bourbon$/.test(normalized)) return "Bulleit Bourbon";
+  if (/^crown royal(\s+whiskey)?$/.test(normalized)) return "Crown Royal";
   if (/^pomegrante schnapps$/.test(normalized)) return "Pomegranate Schnapps";
   if (
     /^crown apple royal$/.test(normalized) ||

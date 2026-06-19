@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 
 function parseJsonLoose(text) {
   try {
@@ -106,6 +108,122 @@ function normalizeProductName(name) {
     .trim();
 }
 
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+
+    if (char === '"' && inQuotes && next === '"') {
+      cell += '"';
+      index += 1;
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cell);
+      if (row.some((value) => String(value || "").trim())) rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+
+    cell += char;
+  }
+
+  row.push(cell);
+  if (row.some((value) => String(value || "").trim())) rows.push(row);
+  return rows;
+}
+
+function clean(value) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function toNumber(value) {
+  const parsed = Number.parseFloat(String(value ?? "").replace(/[$,%]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeTapKey(value, { stripWallNumber = true } = {}) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/’/g, "'")
+    .replace(/&/g, " and ")
+    .replace(stripWallNumber ? /\s*[123]\s*$/g : /$^/, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\btito s\b/g, "titos")
+    .replace(/\bdaniel s\b/g, "daniels")
+    .replace(/\bvodka|whiskey|tequila|rum|gin|bourbon|cognac\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getTapAliases(value) {
+  const text = clean(value);
+  const withoutParenthetical = text.replace(/\([^)]*\)/g, " ");
+  return [...new Set([
+    normalizeTapKey(text, { stripWallNumber: false }),
+    normalizeTapKey(withoutParenthetical, { stripWallNumber: false }),
+    normalizeTapKey(text),
+    normalizeTapKey(withoutParenthetical),
+  ].filter(Boolean))];
+}
+
+async function getTapLookup() {
+  const csvPath = path.join(process.cwd(), "public", "data", "keg-levels-template.csv");
+  const rows = parseCsv(await readFile(csvPath, "utf8"));
+  const byAlias = new Map();
+  let currentWall = "";
+
+  rows.forEach((row) => {
+    const cells = row.map(clean);
+    const wallCell = cells.find((cell) => ["Patio", "Main Bar", "Karaoke"].includes(cell));
+    if (wallCell) {
+      currentWall = wallCell === "Main Bar" ? "Main" : wallCell;
+      return;
+    }
+
+    const tapNumber = toNumber(cells[0]);
+    const type = cells[1];
+    const brand = cells[2];
+    if (!tapNumber || !currentWall || !type || !brand) return;
+
+    const tap = { tapNumber, wall: currentWall, type, brand };
+    getTapAliases(brand).forEach((alias) => {
+      if (!byAlias.has(alias)) byAlias.set(alias, tap);
+    });
+  });
+
+  return byAlias;
+}
+
+function getMatchedTap(productName, tapLookup) {
+  for (const alias of getTapAliases(productName)) {
+    const match = tapLookup.get(alias);
+    if (match) return match;
+  }
+  return null;
+}
+
 function getChargePerOz(product) {
   const cents = Number(product.price_per_unit);
   if (!Number.isFinite(cents) || cents <= 0) return 0;
@@ -116,20 +234,27 @@ export async function GET() {
   try {
     const config = getConfig();
     const token = await getAuthtoken(config);
-    const products = await postJson(config.baseUrl, "/api/productlist", { id: String(config.clientId) }, token);
+    const [products, tapLookup] = await Promise.all([
+      postJson(config.baseUrl, "/api/productlist", { id: String(config.clientId) }, token),
+      getTapLookup(),
+    ]);
 
     if (products.status !== 200 || !Array.isArray(products.json?.productlist)) {
       throw new Error(`PMB productlist failed (${products.status})`);
     }
 
     const items = products.json.productlist
-      .map((product, index) => {
+      .map((product) => {
         const chargePerOz = getChargePerOz(product);
         const name = normalizeProductName(product.name);
         if (!name || !chargePerOz || /coming soon/i.test(name)) return null;
+        const matchedTap = getMatchedTap(name, tapLookup);
 
         return {
-          tapPosition: index + 1,
+          tapPosition: matchedTap?.tapNumber ?? null,
+          wall: matchedTap?.wall || "",
+          type: matchedTap?.type || "",
+          matchedBrand: matchedTap?.brand || "",
           plu: Number(product.plu || 0) || null,
           name,
           chargePerOz,
@@ -141,7 +266,13 @@ export async function GET() {
           isInUse: Number(product.is_in_use || 0) === 1,
         };
       })
-      .filter(Boolean);
+      .filter(Boolean)
+      .sort((a, b) => {
+        if (a.tapPosition && b.tapPosition) return a.tapPosition - b.tapPosition;
+        if (a.tapPosition) return -1;
+        if (b.tapPosition) return 1;
+        return a.name.localeCompare(b.name);
+      });
 
     return NextResponse.json({
       updatedAt: new Date().toISOString(),
