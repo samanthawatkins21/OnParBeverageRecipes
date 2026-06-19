@@ -3560,6 +3560,11 @@ function sum(values) {
   return values.reduce((total, value) => total + (Number.isFinite(value) ? value : 0), 0);
 }
 
+function isRoughlyEqual(left, right) {
+  if (!Number.isFinite(left) || !Number.isFinite(right) || left <= 0 || right <= 0) return false;
+  return Math.abs(left - right) < 0.2;
+}
+
 function money(value) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
