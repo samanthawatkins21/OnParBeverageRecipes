@@ -21,6 +21,60 @@ const STANDARD_BEER_KEG_OZ = 15.5 * 128;
 const KEG_SIZE_OVERRIDES = {
   "stella-artois": 50 * 33.814,
 };
+const DEFAULT_PRICE_OVERRIDES = {
+  "blue-dot-juice": {
+    bottleOz: "128",
+    bottlePrice: "1",
+    updatedAt: "Default pricing",
+  },
+  "cold-brew-coffee": {
+    bottleOz: "384",
+    bottlePrice: "51.67",
+    updatedAt: "Default pricing",
+  },
+  "cranberry-juice": {
+    bottleOz: "2304",
+    bottlePrice: "85",
+    updatedAt: "Default pricing",
+  },
+  lemonade: {
+    bottleOz: "2304",
+    bottlePrice: "52",
+    updatedAt: "Default pricing",
+  },
+  "simple-syrup": {
+    bottleOz: "128",
+    bottlePrice: "3.84",
+    updatedAt: "Default pricing",
+  },
+  "sour-mix": {
+    bottleOz: "128",
+    bottlePrice: "10.24",
+    updatedAt: "Default pricing",
+  },
+  "strawberry-lemonade": {
+    bottleOz: "2304",
+    bottlePrice: "85",
+    updatedAt: "Default pricing",
+  },
+  "sweet-tea": {
+    bottleOz: "2304",
+    bottlePrice: "85",
+    updatedAt: "Default pricing",
+  },
+  vanilla: {
+    bottleOz: "1",
+    bottlePrice: "0.31",
+    updatedAt: "Default pricing",
+  },
+};
+const DEFAULT_KEG_PRICE_OVERRIDES = {
+  "summer-ale": {
+    kegOz: "1984",
+    kegPrice: "185",
+    updatedAt: "Default pricing",
+  },
+};
 const KEG_VENDOR_MAPPINGS = {
   "michelob-ultra": "Heidelberg",
   "busch-light": "Heidelberg",
@@ -246,6 +300,10 @@ let kegUpdatedAt = "";
 let kegConfigUpdateRunning = false;
 let kegDeviceLevels = new Map();
 let kegTemplateAssignments = new Map();
+let liveTapPrices = new Map();
+let liveTapPriceItems = [];
+let liveTapPricingMessage = "Checking Pour My Beer for current tap prices...";
+let liveTapPricingUpdatedAt = "";
 
 init();
 
@@ -279,6 +337,7 @@ async function init() {
   addIngredientRow();
   render();
   runKegLevelSync();
+  runTapPricingSync();
 }
 
 function bindEvents() {
@@ -485,31 +544,89 @@ function createRecipeCard(recipe, state) {
 
 function renderPricing() {
   const searchTerm = pricingSearch.value.trim().toLowerCase();
-  const visibleRecipes = getActiveRecipes().filter((recipe) => recipe.title.toLowerCase().includes(searchTerm));
+  const visibleTapRows = getLiveTapPricingRows(searchTerm);
 
-  renderPricingSummary();
+  renderPricingSummary(visibleTapRows);
   pricingTable.innerHTML = "";
-  visibleRecipes.forEach((recipe) => {
-    const pricing = getRecipePricing(recipe);
-    const override = chargeOverrides[recipe.id];
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td><strong>${escapeHtml(recipe.title)}</strong></td>
-      <td data-pricing-cell="cost">${money(pricing.costPerOz)}</td>
-      <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override ?? "")}" placeholder="${formatNumber(recipe.defaultChargePerOz)}" aria-label="Charge per ounce for ${escapeHtml(recipe.title)}"></td>
-      <td data-pricing-cell="profit">${money(pricing.profitPerOz)}</td>
-      <td data-pricing-cell="margin">${formatNumber(pricing.margin)}%</td>
-      <td data-pricing-cell="pour-oz">${pricing.pourOz ? formatNumber(pricing.pourOz) : "-"}</td>
-      <td data-pricing-cell="pour">${pricing.pourOz ? money(pricing.chargePerPour) : "-"}</td>
-    `;
 
-    const chargeInput = row.querySelector("input");
-    chargeInput.addEventListener("input", () => {
-      setChargeOverride(recipe.id, chargeInput.value);
-      updatePricingRow(row, recipe);
-    });
-    pricingTable.append(row);
+  visibleTapRows.forEach((tapRow) => {
+    pricingTable.append(renderTapPricingRow(tapRow));
   });
+}
+
+function renderTapPricingRow({ livePrice, recipe, kegItem }) {
+  if (recipe) return renderRecipeTapPricingRow(livePrice, recipe);
+  if (kegItem) return renderKegTapPricingRow(livePrice, kegItem);
+  return renderUnmappedTapPricingRow(livePrice);
+}
+
+function renderRecipeTapPricingRow(livePrice, recipe) {
+  const override = chargeOverrides[recipe.id];
+  const chargePerOz = toNumber(override) || livePrice?.chargePerOz || recipe.defaultChargePerOz || 0;
+  const pricing = calculateRecipePricing(recipe, chargePerOz);
+  const sourceLabel = override ? "Manual override" : livePrice ? `PMB live: ${livePrice.name}` : "CSV fallback";
+  const row = document.createElement("tr");
+  row.innerHTML = `
+    <td>
+      <strong>${escapeHtml(livePrice?.name || recipe.title)}</strong>
+      ${livePrice ? `<span class="table-note table-note--accent">Tap ${formatNumber(livePrice.tapPosition)}</span>` : ""}
+      <span class="table-note">${escapeHtml(sourceLabel)}</span>
+    </td>
+    <td data-pricing-cell="cost">${money(pricing.costPerOz)}</td>
+    <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override ?? "")}" placeholder="${formatNumber(livePrice?.chargePerOz || recipe.defaultChargePerOz)}" aria-label="Charge per ounce for ${escapeHtml(recipe.title)}"></td>
+    <td data-pricing-cell="profit">${money(pricing.profitPerOz)}</td>
+    <td data-pricing-cell="margin">${formatNumber(pricing.margin)}%</td>
+    <td data-pricing-cell="pour-oz">${pricing.pourOz ? formatNumber(pricing.pourOz) : "-"}</td>
+    <td data-pricing-cell="pour">${pricing.pourOz ? money(pricing.chargePerPour) : "-"}</td>
+  `;
+
+  const chargeInput = row.querySelector("input");
+  chargeInput.addEventListener("input", () => {
+    setChargeOverride(recipe.id, chargeInput.value);
+    updateRecipeTapPricingRow(row, recipe, livePrice);
+  });
+
+  return row;
+}
+
+function renderKegTapPricingRow(livePrice, kegItem) {
+  const costPerOz = getKegCatalogUnitCost(kegItem);
+  const chargePerOz = livePrice?.chargePerOz || 0;
+  const profitPerOz = chargePerOz && costPerOz ? chargePerOz - costPerOz : 0;
+  const margin = chargePerOz ? (profitPerOz / chargePerOz) * 100 : 0;
+  const row = document.createElement("tr");
+  row.innerHTML = `
+    <td>
+      <strong>${escapeHtml(livePrice?.name || kegItem.name)}</strong>
+      ${livePrice ? `<span class="table-note table-note--accent">Tap ${formatNumber(livePrice.tapPosition)}</span>` : ""}
+      <span class="table-note">${escapeHtml(kegItem.tapSummary || "Beer tap")}</span>
+    </td>
+    <td>${costPerOz ? money(costPerOz) : "-"}</td>
+    <td>${chargePerOz ? money(chargePerOz) : "-"}</td>
+    <td>${chargePerOz && costPerOz ? money(profitPerOz) : "-"}</td>
+    <td>${chargePerOz && costPerOz ? `${formatNumber(margin)}%` : "-"}</td>
+    <td>-</td>
+    <td>-</td>
+  `;
+  return row;
+}
+
+function renderUnmappedTapPricingRow(livePrice) {
+  const row = document.createElement("tr");
+  row.innerHTML = `
+    <td>
+      <strong>${escapeHtml(livePrice.name)}</strong>
+      <span class="table-note table-note--accent">Tap ${formatNumber(livePrice.tapPosition)}</span>
+      <span class="table-note">PMB live</span>
+    </td>
+    <td>-</td>
+    <td>${livePrice.chargePerOz ? money(livePrice.chargePerOz) : "-"}</td>
+    <td>-</td>
+    <td>-</td>
+    <td>-</td>
+    <td>-</td>
+  `;
+  return row;
 }
 
 function updatePricingRow(row, recipe) {
@@ -521,18 +638,31 @@ function updatePricingRow(row, recipe) {
   row.querySelector('[data-pricing-cell="pour"]').textContent = pricing.pourOz ? money(pricing.chargePerPour) : "-";
 }
 
-function renderPricingSummary() {
+function updateRecipeTapPricingRow(row, recipe, livePrice) {
+  const chargePerOz = toNumber(chargeOverrides[recipe.id]) || livePrice?.chargePerOz || recipe.defaultChargePerOz || 0;
+  const pricing = calculateRecipePricing(recipe, chargePerOz);
+  row.querySelector('[data-pricing-cell="cost"]').textContent = money(pricing.costPerOz);
+  row.querySelector('[data-pricing-cell="profit"]').textContent = money(pricing.profitPerOz);
+  row.querySelector('[data-pricing-cell="margin"]').textContent = `${formatNumber(pricing.margin)}%`;
+  row.querySelector('[data-pricing-cell="pour-oz"]').textContent = pricing.pourOz ? formatNumber(pricing.pourOz) : "-";
+  row.querySelector('[data-pricing-cell="pour"]').textContent = pricing.pourOz ? money(pricing.chargePerPour) : "-";
+}
+
+function renderPricingSummary(visibleTapRows = getLiveTapPricingRows(pricingSearch.value.trim().toLowerCase())) {
   const activeRecipes = getActiveRecipes();
   const pricing = activeRecipes.map(getRecipePricing);
   const revenue = sum(pricing.map((item) => item.revenue));
   const cost = sum(pricing.map((item) => item.cost));
   const profit = revenue - cost;
   const margin = revenue ? (profit / revenue) * 100 : 0;
+  const liveStatus = liveTapPricingUpdatedAt ? `${visibleTapRows.length} current taps` : liveTapPricingMessage;
 
   pricingSummary.innerHTML = `
     <h2>Charge pricing</h2>
-    <div class="summary-line"><span>Recipes priced</span><strong>${activeRecipes.length}</strong></div>
+    <div class="summary-line"><span>Cocktail recipes</span><strong>${activeRecipes.length}</strong></div>
+    <div class="summary-line"><span>Current PMB taps</span><strong>${liveTapPriceItems.length || visibleTapRows.length}</strong></div>
     <div class="summary-line"><span>Charge overrides</span><strong>${countChargeOverrides()}</strong></div>
+    <div class="summary-line"><span>PMB live prices</span><strong>${escapeHtml(liveStatus)}</strong></div>
     <div class="summary-line"><span>Projected batch revenue</span><strong>${money(revenue)}</strong></div>
     <div class="summary-line"><span>Projected batch profit</span><strong>${money(profit)}</strong></div>
     <div class="summary-line"><span>Projected margin</span><strong>${formatNumber(margin)}%</strong></div>
@@ -543,11 +673,12 @@ function renderIngredients() {
   const searchTerm = ingredientSearch.value.trim().toLowerCase();
   const visibleIngredients = ingredients.filter((ingredient) => {
     if (ingredient.id === "water") return false;
+    if (isHiddenPricingIngredient(ingredient)) return false;
     const haystack = `${ingredient.name} ${ingredient.recipes.join(" ")}`.toLowerCase();
     return haystack.includes(searchTerm);
   });
   const visibleKegs = kegPricingItems.filter((item) => {
-    const haystack = `${item.name} ${item.type} ${item.typeSummary} ${item.wall} ${item.tapNumber} ${item.tapSummary} ${item.vendor}`.toLowerCase();
+    const haystack = `${item.name} ${item.wall} ${item.tapNumber} ${item.tapSummary} ${item.vendor}`.toLowerCase();
     return haystack.includes(searchTerm);
   });
   const groupedIngredients = groupIngredientsForDisplay(visibleIngredients);
@@ -604,7 +735,6 @@ function renderIngredients() {
         <td>
           <strong>${escapeHtml(item.name)}</strong>
           <span class="table-note table-note--accent">${escapeHtml(item.tapSummary)}</span>
-          <span class="table-note">${escapeHtml(item.typeSummary)}</span>
           ${item.vendorProduct ? `<span class="table-note table-note--accent">Provi mapped</span><span class="table-note">${escapeHtml(item.vendorProduct.productName)}</span>` : ""}
         </td>
         <td>${vendorName === "Needs mapping" ? `<span class="table-note">${escapeHtml(vendorName)}</span>` : `${escapeHtml(vendorName)}<span class="table-note">via Provi</span>`}</td>
@@ -1102,6 +1232,35 @@ async function runKegLevelSync() {
   } finally {
     kegSyncLoading = false;
     renderKegLevels();
+  }
+}
+
+async function runTapPricingSync() {
+  liveTapPricingMessage = "Checking Pour My Beer for current tap prices...";
+  renderPricingSummary();
+
+  try {
+    const response = await fetch("/api/tap-pricing");
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result?.error || "Could not load tap pricing.");
+    }
+
+    liveTapPriceItems = result.items || [];
+    liveTapPrices = buildLiveTapPriceMap(liveTapPriceItems);
+    liveTapPricingUpdatedAt = result.updatedAt || new Date().toISOString();
+    const matchedCount = getActiveRecipes().filter((recipe) => getLiveTapPrice(recipe)).length;
+    liveTapPricingMessage = `Matched ${matchedCount} recipes from Pour My Beer.`;
+    renderPricing();
+    renderRecipes();
+    renderOldRecipes();
+    renderStats();
+  } catch (error) {
+    liveTapPrices = new Map();
+    liveTapPriceItems = [];
+    liveTapPricingUpdatedAt = "";
+    liveTapPricingMessage = error.message || "Could not load current tap pricing.";
+    renderPricingSummary();
   }
 }
 
@@ -2246,7 +2405,12 @@ function getRecipeTotals(recipe) {
 
 function getRecipePricing(recipe) {
   const totals = getRecipeTotals(recipe);
-  const chargePerOz = toNumber(chargeOverrides[recipe.id]) || recipe.defaultChargePerOz || 0;
+  const chargePerOz = toNumber(chargeOverrides[recipe.id]) || getLiveTapPrice(recipe)?.chargePerOz || recipe.defaultChargePerOz || 0;
+  return calculateRecipePricing(recipe, chargePerOz, totals);
+}
+
+function calculateRecipePricing(recipe, chargePerOz, existingTotals = null) {
+  const totals = existingTotals || getRecipeTotals(recipe);
   const pourOz = getPourOzForAlcoholTarget(recipe, totals.oz);
   const profitPerOz = chargePerOz - totals.costPerOz;
   const revenue = chargePerOz * totals.oz;
@@ -2262,6 +2426,121 @@ function getRecipePricing(recipe) {
     margin: chargePerOz ? (profitPerOz / chargePerOz) * 100 : 0,
     pourOz,
   };
+}
+
+function getLiveTapPricingRows(searchTerm = "") {
+  const normalizedSearch = String(searchTerm || "").trim().toLowerCase();
+
+  if (!liveTapPriceItems.length) {
+    return [
+      ...getActiveRecipes().map((recipe) => ({ livePrice: null, recipe, kegItem: null })),
+      ...kegPricingItems.map((kegItem) => ({ livePrice: null, recipe: null, kegItem })),
+    ].filter(({ recipe, kegItem }) => {
+      const haystack = `${recipe?.title || ""} ${kegItem?.name || ""} ${kegItem?.tapSummary || ""}`.toLowerCase();
+      return haystack.includes(normalizedSearch);
+    });
+  }
+
+  return liveTapPriceItems
+    .map((livePrice) => ({
+      livePrice,
+      recipe: getRecipeForLiveTapPrice(livePrice),
+      kegItem: getKegPricingItemForLiveTapPrice(livePrice),
+    }))
+    .filter(({ livePrice, recipe, kegItem }) => {
+      const haystack = `${livePrice.name} ${livePrice.tapPosition} ${recipe?.title || ""} ${kegItem?.name || ""} ${kegItem?.tapSummary || ""}`.toLowerCase();
+      return haystack.includes(normalizedSearch);
+    })
+    .sort((a, b) => toNumber(a.livePrice?.tapPosition) - toNumber(b.livePrice?.tapPosition));
+}
+
+function buildLiveTapPriceMap(items) {
+  const map = new Map();
+  items.forEach((item) => {
+    if (!item?.name || !item.chargePerOz) return;
+    getTapPriceAliases(item.name).forEach((key) => {
+      if (!map.has(key)) {
+        map.set(key, item);
+      }
+    });
+  });
+  return map;
+}
+
+function getLiveTapPrice(recipe) {
+  for (const key of getTapPriceAliases(recipe.title)) {
+    const match = liveTapPrices.get(key);
+    if (match) return match;
+  }
+  return null;
+}
+
+function getRecipeForLiveTapPrice(livePrice) {
+  if (!livePrice?.name) return null;
+  const aliases = getTapPriceAliases(livePrice.name);
+  return getActiveRecipes().find((recipe) => {
+    const recipeAliases = getTapPriceAliases(recipe.title);
+    return aliases.some((alias) => recipeAliases.includes(alias));
+  }) || null;
+}
+
+function getLiveBeerTapPricingRows(searchTerm = "") {
+  const normalizedSearch = String(searchTerm || "").trim().toLowerCase();
+  const liveRows = liveTapPriceItems
+    .map((livePrice) => {
+      const kegItem = getKegPricingItemForLiveTapPrice(livePrice);
+      return kegItem ? { livePrice, kegItem } : null;
+    })
+    .filter(Boolean);
+
+  const rows = liveRows.length
+    ? liveRows
+    : kegPricingItems.map((kegItem) => ({ livePrice: null, kegItem }));
+
+  return rows
+    .filter(({ livePrice, kegItem }) => {
+      const haystack = `${livePrice?.name || ""} ${kegItem.name} ${kegItem.tapSummary} ${kegItem.vendor}`.toLowerCase();
+      return haystack.includes(normalizedSearch);
+    })
+    .sort((a, b) => {
+      const tapA = getLiveTapWallNumber(a.livePrice?.name) || a.kegItem.tapNumber || 0;
+      const tapB = getLiveTapWallNumber(b.livePrice?.name) || b.kegItem.tapNumber || 0;
+      if (tapA !== tapB) return tapA - tapB;
+      return (a.livePrice?.name || a.kegItem.name).localeCompare(b.livePrice?.name || b.kegItem.name);
+    });
+}
+
+function getKegPricingItemForLiveTapPrice(livePrice) {
+  if (!livePrice?.name) return null;
+  const aliases = getTapPriceAliases(livePrice.name);
+  return kegPricingItems.find((item) => {
+    const itemAliases = getTapPriceAliases(item.name);
+    return aliases.some((alias) => itemAliases.includes(alias));
+  }) || null;
+}
+
+function getLiveTapWallNumber(name) {
+  return toNumber(String(name || "").match(/\s+([123])\s*$/)?.[1]);
+}
+
+function getTapPriceAliases(value) {
+  const text = String(value || "");
+  const withoutParenthetical = text.replace(/\([^)]*\)/g, " ");
+  return [...new Set([normalizeTapPriceKey(text), normalizeTapPriceKey(withoutParenthetical)].filter(Boolean))];
+}
+
+function normalizeTapPriceKey(value) {
+  return String(value || "")
+    .replace(/’/g, "'")
+    .replace(/&/g, " and ")
+    .replace(/\s+[123]\s*$/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\btito s\b/g, "titos")
+    .replace(/\bdaniel s\b/g, "daniels")
+    .replace(/\bvodka|whiskey|tequila|rum|gin\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function getPourOzForAlcoholTarget(recipe, totalOz) {
@@ -2569,6 +2848,7 @@ function groupIngredientsForDisplay(sourceIngredients) {
 
   sourceIngredients.forEach((ingredient) => {
     const groupName = getIngredientGroup(ingredient.name);
+    if (groupName === "Other") return;
     if (!grouped.has(groupName)) {
       grouped.set(groupName, []);
     }
@@ -2581,6 +2861,11 @@ function groupIngredientsForDisplay(sourceIngredients) {
       (grouped.get(groupName) || []).sort((a, b) => getIngredientSortKey(a).localeCompare(getIngredientSortKey(b))),
     ])
     .filter(([, items]) => items.length);
+}
+
+function isHiddenPricingIngredient(ingredient) {
+  const normalized = clean(ingredient?.name).toLowerCase();
+  return getIngredientGroup(ingredient?.name) === "Other";
 }
 
 function countChargeOverrides() {
@@ -3388,9 +3673,12 @@ function getMetricNumber(metrics, label) {
 
 function loadOverrides() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    return {
+      ...DEFAULT_PRICE_OVERRIDES,
+      ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"),
+    };
   } catch {
-    return {};
+    return { ...DEFAULT_PRICE_OVERRIDES };
   }
 }
 
@@ -3400,9 +3688,12 @@ function saveOverrides() {
 
 function loadKegPriceOverrides() {
   try {
-    return JSON.parse(localStorage.getItem(KEG_PRICE_STORAGE_KEY) || "{}");
+    return {
+      ...DEFAULT_KEG_PRICE_OVERRIDES,
+      ...JSON.parse(localStorage.getItem(KEG_PRICE_STORAGE_KEY) || "{}"),
+    };
   } catch {
-    return {};
+    return { ...DEFAULT_KEG_PRICE_OVERRIDES };
   }
 }
 

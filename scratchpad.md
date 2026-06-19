@@ -2,7 +2,8 @@
 
 ## Project
 
-- Repo working copy: `C:\Users\info\Projects\OnParBeverageRecipes`
+- Repo working copy on this Mac: `/Users/samanthawatkins/Desktop/OnParBeverageRecipes`
+- Older downloaded copy exists at `/Users/samanthawatkins/Desktop/OnParBeverageRecipes-main`; use the real repo above for GitHub work.
 - Stack: `Next.js` App Router
 - Main UI: `app/page.jsx`
 - Main styles: `app/globals.css`
@@ -15,11 +16,34 @@
 
 - `Recipes`
 - `Tap Wall Pricing`
-- `Cocktail Ingredients`
-- `Add Recipe`
-- `Inventory`
 - `Keg Levels`
+- `Pricing`
+- `Inventory`
+- `Weekly Usage`
+- `Add Recipe`
 - `Old Recipes`
+
+## Tap Wall Pricing
+
+- Tap Wall Pricing now pulls current charge-per-ounce values from Pour My Beer.
+- Route: `app/api/tap-pricing/route.js`
+- PMB source endpoint: `/api/productlist`
+- PMB field mapping:
+  - `price_per_unit` is cents per ounce
+  - `tapPosition` is the current order from PMB product list, displayed as `Tap 1` through `Tap 102`
+- The screen is ordered by the live PMB tap/product order, not grouped by cocktail vs beer.
+- Current behavior:
+  - cocktail rows are matched back to recipes when possible so cost, profit, margin, pour oz, and charge per pour still calculate
+  - beer rows are matched back to keg pricing when possible so keg cost/margin can display
+  - unmapped PMB products still display with live charge per ounce
+  - manual charge overrides still win over PMB pricing for matched cocktail recipe rows
+  - CSV default charge is only a fallback when PMB does not have a matched cocktail row
+- Verified examples:
+  - `Tap 1` = `Jack Daniel's Whiskey 3`
+  - `Tap 2` = `Tito's Vodka 2`
+  - `Tap 3` = `Kona Big Wave 1`
+  - `Pabst Blue Ribbon 1` and `Pabst Blue Ribbon 2` both appear as separate PMB rows
+- Latest local verification showed `102` current PMB taps.
 
 ## Current Recipe Behavior
 
@@ -59,6 +83,17 @@
 - `Creme de Cacao`, `Mint`, `Lemon Juice`, and `Lime Juice` are in `Proof`.
 - `Simple Syrup` and `Blue Dot Juice` are `Made In House`.
 - `Sweet and Sour` is treated as the same item as `Sour Mix`.
+- Hidden/duplicate pricing cleanup:
+  - duplicate `1152 Blue Dot Juice` was removed from pricing display
+  - `Blue Dot Juice` stays under `Made In House`
+- Current default ingredient pricing overrides in code:
+  - `Blue Dot Juice`: 1 gallon / 128 oz from 6 flavor packets; 6-packet box costs `$1`
+  - `Lemonade`: 3 gallon box diluted 5:1 = 18 finished gallons / 2304 oz, `$52`
+  - `Cranberry Juice`, `Strawberry Lemonade`, and `Sweet Tea`: same 2304 oz yield, `$85`
+  - `Simple Syrup`: `$0.03/oz`
+  - `Sour Mix`: `$0.08/oz`
+  - `Vanilla`: `$0.31/oz`
+  - `Cold Brew`: 2 x 32 oz bottles plus 2.5 gallons water = 384 oz finished; case pricing maps to `$51.67`
 
 ## Vendor Price Sync
 
@@ -158,6 +193,9 @@
   - `PMB_API_CLIENT_ID`
   - `PMB_API_CLIENT_NAME`
   - optional `PMB_KEG_DEVICE_ID`
+- Keg pricing notes:
+  - beer style/type labels were removed from display/search because they were inaccurate
+  - `Summer Ale` default keg pricing is set to 1/2 bbl / 1984 oz and `$185`
 
 ## Current Keg Matching Caveat
 
@@ -170,11 +208,19 @@
 
 ## Local Dev Notes
 
-- Important recurring Windows issue: stale `.next` chunks can cause:
+- Important recurring Next.js issue: stale `.next` chunks can cause:
   - `Cannot find module './331.js'`
   - `Cannot find module './833.js'`
   - `__webpack_modules__[moduleId] is not a function`
-- Reliable fix:
+- Reliable fix on Mac:
+
+```bash
+lsof -tiTCP:3000 -sTCP:LISTEN | xargs -r kill
+rm -rf .next
+npm run dev
+```
+
+- Reliable fix on Windows:
 
 ```powershell
 Stop-Process -Name node -Force -ErrorAction SilentlyContinue
@@ -183,6 +229,10 @@ npm.cmd run dev
 ```
 
 - Build check before push:
+
+```bash
+npm run build
+```
 
 ```powershell
 npm.cmd run build
