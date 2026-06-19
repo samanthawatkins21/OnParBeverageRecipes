@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 const PROVI_BASE_URL = "https://app.provi.com";
 const PROVI_CAPTURE_PATH = path.join(os.homedir(), ".FoodOrderAgent", "provi", "captures", "latest-provi-capture.json");
 const PROVI_SESSION_PATH = path.join(os.homedir(), ".FoodOrderAgent", "provi", "provi_session_state.json");
+const STANDARD_BEER_KEG_OZ = 15.5 * 128;
 
 export async function POST(request) {
   try {
@@ -236,11 +237,8 @@ function selectMatchingProduct(products, item, targetBottleOz) {
   if (!candidates.length) return null;
 
   if (isKegSyncItem(item)) {
-    const kegCandidates = candidates.filter((entry) => isKegPackage(entry) || isRoughlyEqual(entry.bottleOz, targetBottleOz));
-    if (!kegCandidates.length) return null;
-    const exactKegByOz = kegCandidates.find((entry) => isRoughlyEqual(entry.bottleOz, targetBottleOz));
-    if (exactKegByOz) return exactKegByOz;
-    return kegCandidates[0];
+    const expectedKegOz = targetBottleOz || STANDARD_BEER_KEG_OZ;
+    return candidates.find((entry) => isKegPackage(entry) && isRoughlyEqual(entry.bottleOz, expectedKegOz)) || null;
   }
 
   const exactByOz = candidates.find((entry) => isRoughlyEqual(entry.bottleOz, targetBottleOz));

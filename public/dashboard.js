@@ -17,6 +17,7 @@ const KEG_PAR_STORAGE_KEY = "cocktail-dashboard-keg-par";
 const KEG_PRICE_STORAGE_KEY = "cocktail-dashboard-keg-prices";
 const WEEKLY_USAGE_CURRENT_STORAGE_KEY = "cocktail-dashboard-weekly-usage-current";
 const WEEKLY_USAGE_HISTORY_STORAGE_KEY = "cocktail-dashboard-weekly-usage-history";
+const STANDARD_BEER_KEG_OZ = 15.5 * 128;
 const KEG_VENDOR_MAPPINGS = {
   "michelob-ultra": "Heidelberg",
   "busch-light": "Heidelberg",
@@ -594,6 +595,7 @@ function renderIngredients() {
       const override = kegPriceOverrides[item.id] || {};
       const currentUnitCost = getKegCatalogUnitCost(item);
       const previousPriceNote = getPreviousPriceNote(override);
+      const staleSmallKegOverride = isStaleSmallBeerKegOverride(item, override);
       const row = document.createElement("tr");
       row.innerHTML = `
         <td>
@@ -604,15 +606,15 @@ function renderIngredients() {
         </td>
         <td>${vendorName === "Needs mapping" ? `<span class="table-note">${escapeHtml(vendorName)}</span>` : `${escapeHtml(vendorName)}<span class="table-note">via Provi</span>`}</td>
         <td>${money(currentUnitCost)}</td>
-        <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override.kegOz ?? "")}" placeholder="${escapeHtml(formatNumber(item.kegOz))}" aria-label="Keg ounces for ${escapeHtml(item.name)}"></td>
-        <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(override.kegPrice ?? "")}" aria-label="Keg price for ${escapeHtml(item.name)}"></td>
-        <td class="muted">${formatUpdatedAt(override.updatedAt)}${previousPriceNote ? `<span class="table-note">${escapeHtml(previousPriceNote)}</span>` : ""}</td>
+        <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(getKegOverrideDisplayOz(item, override))}" placeholder="${escapeHtml(formatNumber(item.kegOz))}" aria-label="Keg ounces for ${escapeHtml(item.name)}"></td>
+        <td><input type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*" value="${escapeHtml(staleSmallKegOverride ? "" : override.kegPrice ?? "")}" aria-label="Keg price for ${escapeHtml(item.name)}"></td>
+        <td class="muted">${staleSmallKegOverride ? '<span class="table-note">Ignored old small-keg price</span>' : formatUpdatedAt(override.updatedAt)}${previousPriceNote && !staleSmallKegOverride ? `<span class="table-note">${escapeHtml(previousPriceNote)}</span>` : ""}</td>
         <td><button class="mini-button" type="button">Update</button></td>
       `;
 
       const [kegOzInput, kegPriceInput] = row.querySelectorAll("input");
       const updateButton = row.querySelector("button");
-      updateButton.addEventListener("click", () => saveKegPriceOverride(item.id, kegOzInput.value, kegPriceInput.value));
+      updateButton.addEventListener("click", () => saveKegPriceOverride(item.id, kegOzInput.value, kegPriceInput.value, item));
       kegPricingTable?.append(row);
     });
   });
@@ -1773,14 +1775,15 @@ function saveIngredientOverride(id, bottleOz, bottlePrice) {
   render();
 }
 
-function saveKegPriceOverride(id, kegOz, kegPrice) {
+function saveKegPriceOverride(id, kegOz, kegPrice, item = null) {
   const existingOverride = kegPriceOverrides[id] || {};
+  const nextKegOz = item && isBeerPricingTap(item) ? String(STANDARD_BEER_KEG_OZ) : kegOz;
   const nextKegPrice = toNumber(kegPrice);
   const previousKegPrice = toNumber(existingOverride.kegPrice);
   const didPriceChange = nextKegPrice > 0 && previousKegPrice > 0 && Math.abs(nextKegPrice - previousKegPrice) > 0.001;
   const nextOverride = {
     ...existingOverride,
-    kegOz,
+    kegOz: nextKegOz,
     kegPrice,
     updatedAt: new Date().toISOString(),
     previousKegPrice: didPriceChange ? String(previousKegPrice) : existingOverride.previousKegPrice || "",
@@ -2431,7 +2434,7 @@ function getDefaultKegSizeOz(item) {
   const liveRow = getKegLiveRow(item);
   const rawKegSize = toNumber(liveRow?.rawKegSize);
   if (rawKegSize > 500) return rawKegSize;
-  return 1984;
+  return STANDARD_BEER_KEG_OZ;
 }
 
 function getKegVendorLabel(item) {
@@ -2460,7 +2463,8 @@ function getKegDisplayName(value) {
 
 function getKegCatalogUnitCost(item) {
   const override = kegPriceOverrides[item.id];
-  const kegOz = toNumber(override?.kegOz) || toNumber(item.kegOz);
+  if (isStaleSmallBeerKegOverride(item, override)) return 0;
+  const kegOz = getKegPricingOz(item);
   const kegPrice = toNumber(override?.kegPrice);
   if (kegOz && kegPrice) return kegPrice / kegOz;
   return 0;
@@ -2468,11 +2472,28 @@ function getKegCatalogUnitCost(item) {
 
 function getKegPrice(item) {
   const override = kegPriceOverrides[item.id];
+  if (isStaleSmallBeerKegOverride(item, override)) return 0;
   const explicitPrice = toNumber(override?.kegPrice);
   if (explicitPrice > 0) return explicitPrice;
   const unitCost = getKegCatalogUnitCost(item);
-  const kegOz = toNumber(override?.kegOz) || toNumber(item.kegOz);
+  const kegOz = getKegPricingOz(item);
   return unitCost && kegOz ? unitCost * kegOz : 0;
+}
+
+function getKegPricingOz(item) {
+  if (item?.priceType === "keg" || isBeerPricingTap(item)) return STANDARD_BEER_KEG_OZ;
+  return toNumber(kegPriceOverrides[item.id]?.kegOz) || toNumber(item.kegOz) || STANDARD_BEER_KEG_OZ;
+}
+
+function getKegOverrideDisplayOz(item, override = {}) {
+  if (isBeerPricingTap(item)) return String(STANDARD_BEER_KEG_OZ);
+  return override.kegOz ?? "";
+}
+
+function isStaleSmallBeerKegOverride(item, override = {}) {
+  if (!item || !isBeerPricingTap(item)) return false;
+  const overrideKegOz = toNumber(override?.kegOz);
+  return overrideKegOz > 0 && !isRoughlyEqual(overrideKegOz, STANDARD_BEER_KEG_OZ);
 }
 
 function getIngredientBottleCost(ingredient) {
@@ -2496,6 +2517,8 @@ function countOverrides() {
 function countKegPriceOverrides() {
   return Object.keys(kegPriceOverrides).filter((key) => {
     const override = kegPriceOverrides[key];
+    const pricingItem = getKegPricingItem(key);
+    if (pricingItem && isStaleSmallBeerKegOverride(pricingItem, override)) return false;
     return toNumber(override?.kegOz) && toNumber(override?.kegPrice);
   }).length;
 }
@@ -3180,10 +3203,12 @@ async function runVendorSync() {
         const existingOverride = kegPriceOverrides[update.id] || {};
         const previousKegPrice = toNumber(existingOverride.kegPrice);
         const nextKegPrice = Number(update.bottlePrice);
+        const pricingItem = getKegPricingItem(update.id);
+        const nextKegOz = pricingItem && isBeerPricingTap(pricingItem) ? STANDARD_BEER_KEG_OZ : update.bottleOz;
         const didPriceChange = previousKegPrice > 0 && Math.abs(previousKegPrice - nextKegPrice) > 0.001;
         kegPriceOverrides[update.id] = {
           ...existingOverride,
-          kegOz: String(update.bottleOz),
+          kegOz: String(nextKegOz),
           kegPrice: String(update.bottlePrice),
           updatedAt: update.updatedAt || new Date().toISOString(),
           previousKegPrice: didPriceChange ? String(previousKegPrice) : "",
