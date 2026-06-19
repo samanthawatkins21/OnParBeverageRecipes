@@ -1474,6 +1474,11 @@ function findKegPricingItem(name) {
   return kegPricingItems.find((entry) => entry.id === key) || null;
 }
 
+function getKegPricingItem(value) {
+  const directMatch = kegPricingItems.find((entry) => entry.id === value);
+  return directMatch || findKegPricingItem(value);
+}
+
 function getKegRowTypeClass(item) {
   if (isLiquorOunceTap(toNumber(item.tapNumber))) return "keg-row--liquor";
   if (normalizeTitle(item.type) === "cocktail") return "keg-row--cocktail";
