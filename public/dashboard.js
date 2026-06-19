@@ -568,9 +568,9 @@ function renderRecipeTapPricingRow(livePrice, recipe) {
   const sourceLabel = override ? "Manual override" : livePrice ? `PMB live: ${livePrice.name}` : "CSV fallback";
   const row = document.createElement("tr");
   row.innerHTML = `
+    <td>${formatTapCell(livePrice)}</td>
     <td>
       <strong>${escapeHtml(livePrice?.name || recipe.title)}</strong>
-      ${livePrice ? `<span class="table-note table-note--accent">Tap ${formatNumber(livePrice.tapPosition)}</span>` : ""}
       <span class="table-note">${escapeHtml(sourceLabel)}</span>
     </td>
     <td data-pricing-cell="cost">${money(pricing.costPerOz)}</td>
@@ -598,9 +598,9 @@ function renderKegTapPricingRow(livePrice, kegItem) {
   const locationLabel = getLiveTapLocationLabel(livePrice, kegItem);
   const row = document.createElement("tr");
   row.innerHTML = `
+    <td>${formatTapCell(livePrice)}</td>
     <td>
       <strong>${escapeHtml(livePrice?.name || kegItem.name)}</strong>
-      ${livePrice ? `<span class="table-note table-note--accent">Tap ${formatNumber(livePrice.tapPosition)}</span>` : ""}
       <span class="table-note">${escapeHtml(locationLabel)}</span>
     </td>
     <td>${costPerOz ? money(costPerOz) : "-"}</td>
@@ -627,9 +627,9 @@ function renderIngredientTapPricingRow(livePrice, ingredient) {
   const margin = chargePerOz ? (profitPerOz / chargePerOz) * 100 : 0;
   const row = document.createElement("tr");
   row.innerHTML = `
+    <td>${formatTapCell(livePrice)}</td>
     <td>
       <strong>${escapeHtml(livePrice.name)}</strong>
-      <span class="table-note table-note--accent">Tap ${formatNumber(livePrice.tapPosition)}</span>
       <span class="table-note">PMB live: ${escapeHtml(ingredient.name)} cost</span>
     </td>
     <td>${costPerOz ? money(costPerOz) : "-"}</td>
@@ -645,9 +645,9 @@ function renderIngredientTapPricingRow(livePrice, ingredient) {
 function renderUnmappedTapPricingRow(livePrice) {
   const row = document.createElement("tr");
   row.innerHTML = `
+    <td>${formatTapCell(livePrice)}</td>
     <td>
       <strong>${escapeHtml(livePrice.name)}</strong>
-      <span class="table-note table-note--accent">Tap ${formatNumber(livePrice.tapPosition)}</span>
       <span class="table-note">PMB live</span>
     </td>
     <td>-</td>
@@ -658,6 +658,10 @@ function renderUnmappedTapPricingRow(livePrice) {
     <td>-</td>
   `;
   return row;
+}
+
+function formatTapCell(livePrice) {
+  return livePrice?.tapPosition ? `<strong>${formatNumber(livePrice.tapPosition)}</strong>` : "-";
 }
 
 function updatePricingRow(row, recipe) {

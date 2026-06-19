@@ -93,7 +93,8 @@ export default function DashboardPage() {
               <table className="pricing-table">
                 <thead>
                   <tr>
-                    <th>Tap / Product</th>
+                    <th>Tap</th>
+                    <th>Product</th>
                     <th>Cost / oz</th>
                     <th>Charge / oz</th>
                     <th>Profit / oz</th>
