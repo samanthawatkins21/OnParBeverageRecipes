@@ -101,7 +101,7 @@ async function syncVendorWithProvi(items, context) {
       const matchedProduct = await fetchMatchedProviProduct(item, sessionContext, context.proviSearchCache, context.distributorHints);
       if (!matchedProduct) continue;
 
-      const bottlePrice = getMatchedInventoryPrice(matchedProduct);
+      const bottlePrice = getMatchedInventoryPrice(matchedProduct, item);
       const bottleOz = getMatchedBottleOz(matchedProduct) || product.bottleOz;
       if (!Number.isFinite(bottlePrice) || bottlePrice <= 0 || !Number.isFinite(bottleOz) || bottleOz <= 0) continue;
 
@@ -226,13 +226,22 @@ function selectMatchingProduct(products, item, targetBottleOz) {
   const candidates = (products || [])
     .map((product) => ({
       product,
-      inventory: getPreferredInventory(product),
+      inventory: getPreferredInventory(product, item),
       bottleOz: getProductBottleOz(product),
       sizeLabel: normalizeName(product?.container_size || ""),
+      packageText: normalizeName(`${product?.container_size || ""} ${product?.name || ""}`),
     }))
-    .filter((entry) => entry.inventory && toNumber(entry.inventory.unit_price) > 0);
+    .filter((entry) => entry.inventory && getInventoryPrice(entry.inventory, item) > 0);
 
   if (!candidates.length) return null;
+
+  if (isKegSyncItem(item)) {
+    const kegCandidates = candidates.filter((entry) => isKegPackage(entry) || isRoughlyEqual(entry.bottleOz, targetBottleOz));
+    if (!kegCandidates.length) return null;
+    const exactKegByOz = kegCandidates.find((entry) => isRoughlyEqual(entry.bottleOz, targetBottleOz));
+    if (exactKegByOz) return exactKegByOz;
+    return kegCandidates[0];
+  }
 
   const exactByOz = candidates.find((entry) => isRoughlyEqual(entry.bottleOz, targetBottleOz));
   if (exactByOz) return exactByOz;
@@ -251,13 +260,33 @@ function selectMatchingProduct(products, item, targetBottleOz) {
   return candidates[0];
 }
 
-function getPreferredInventory(product) {
-  const inventory = Array.isArray(product?.inventory) ? product.inventory : [];
-  return inventory.find((entry) => toNumber(entry?.unit_price) > 0) || inventory[0] || null;
+function isKegSyncItem(item) {
+  return item?.priceType === "keg" || toNumber(item?.vendorProduct?.bottleOz) >= 500;
 }
 
-function getMatchedInventoryPrice(match) {
-  return toNumber(match?.variant?.inventory?.unit_price || match?.variant?.inventory?.price || match?.variant?.product?.unit_price || match?.variant?.product?.price);
+function isKegPackage(entry) {
+  return /\b(keg|bbl|barrel)\b/i.test(entry.packageText || "");
+}
+
+function getPreferredInventory(product, item) {
+  const inventory = Array.isArray(product?.inventory) ? product.inventory : [];
+  return inventory.find((entry) => getInventoryPrice(entry, item) > 0) || inventory[0] || null;
+}
+
+function getMatchedInventoryPrice(match, item) {
+  const inventory = match?.variant?.inventory || {};
+  const product = match?.variant?.product || {};
+  return getInventoryPrice(inventory, item) || toNumber(product?.unit_price || product?.price);
+}
+
+function getInventoryPrice(inventory, item) {
+  if (!inventory) return 0;
+  const unitPrice = toNumber(inventory.unit_price || inventory.price);
+  if (unitPrice > 0) return unitPrice;
+  if (isKegSyncItem(item)) {
+    return toNumber(inventory.case_price || inventory.keg_price || inventory.pack_price);
+  }
+  return 0;
 }
 
 function getMatchedBottleOz(match) {
@@ -302,6 +331,16 @@ function getSearchQueries(product, item) {
 
 function parseBottleOzFromText(value) {
   const text = String(value || "");
+  const bblMatch = text.match(/(\d+)?(?:\s*\/\s*(\d+))?\s*bbl\b/i);
+  if (bblMatch) {
+    const numerator = bblMatch[1] ? Number.parseFloat(bblMatch[1]) : 1;
+    const denominator = bblMatch[2] ? Number.parseFloat(bblMatch[2]) : 1;
+    if (numerator > 0 && denominator > 0) return (numerator / denominator) * 3968;
+  }
+
+  const gallonMatch = text.match(/(\d+(?:\.\d+)?)\s*(gal|gallon|gallons)\b/i);
+  if (gallonMatch) return Number.parseFloat(gallonMatch[1]) * 128;
+
   const literMatch = text.match(/(\d+(?:\.\d+)?)\s*l\b/i);
   if (literMatch) return Number.parseFloat(literMatch[1]) * 33.814;
 
