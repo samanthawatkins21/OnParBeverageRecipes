@@ -22,6 +22,26 @@ const KEG_SIZE_OVERRIDES = {
   "stella-artois": 50 * 33.814,
 };
 const DEFAULT_PRICE_OVERRIDES = {
+  "1800-reposado": {
+    bottleOz: "59.1745",
+    bottlePrice: "44.18",
+    updatedAt: "Default OHLQ pricing",
+  },
+  "absolut-raspberri": {
+    bottleOz: "33.814",
+    bottlePrice: "25.38",
+    updatedAt: "Default OHLQ pricing",
+  },
+  "absolut-vanilia": {
+    bottleOz: "33.814",
+    bottlePrice: "25.38",
+    updatedAt: "Default OHLQ pricing",
+  },
+  "bacardi-superior": {
+    bottleOz: "59.1745",
+    bottlePrice: "24.44",
+    updatedAt: "Default OHLQ pricing",
+  },
   "blue-dot-juice": {
     bottleOz: "128",
     bottlePrice: "1",
@@ -37,15 +57,60 @@ const DEFAULT_PRICE_OVERRIDES = {
     bottlePrice: "85",
     updatedAt: "Default pricing",
   },
+  "crown-royal-peach": {
+    bottleOz: "59.1745",
+    bottlePrice: "49.82",
+    updatedAt: "Default OHLQ pricing",
+  },
+  "don-julio-blanco": {
+    bottleOz: "25.3605",
+    bottlePrice: "47",
+    updatedAt: "Default OHLQ pricing",
+  },
+  "grey-goose": {
+    bottleOz: "59.1745",
+    bottlePrice: "42.3",
+    updatedAt: "Default OHLQ pricing",
+  },
+  hennessy: {
+    bottleOz: "59.1745",
+    bottlePrice: "75.2",
+    updatedAt: "Default OHLQ pricing",
+  },
+  jameson: {
+    bottleOz: "59.1745",
+    bottlePrice: "51.7",
+    updatedAt: "Default OHLQ pricing",
+  },
+  "jose-cuervo-gold": {
+    bottleOz: "59.1745",
+    bottlePrice: "32.9",
+    updatedAt: "Default OHLQ pricing",
+  },
   lemonade: {
     bottleOz: "2304",
     bottlePrice: "52",
     updatedAt: "Default pricing",
   },
+  "patron-silver": {
+    bottleOz: "59.1745",
+    bottlePrice: "98.7",
+    updatedAt: "Default OHLQ pricing",
+  },
+  "pink-whitney": {
+    bottleOz: "59.1745",
+    bottlePrice: "20.68",
+    updatedAt: "Default OHLQ pricing",
+  },
   "simple-syrup": {
     bottleOz: "128",
     bottlePrice: "3.84",
     updatedAt: "Default pricing",
+  },
+  screwball: {
+    bottleOz: "25.3605",
+    bottlePrice: "21.62",
+    updatedAt: "Default OHLQ pricing",
   },
   "sour-mix": {
     bottleOz: "128",
@@ -158,25 +223,42 @@ const PROOF_MAPPINGS = {
   "watermelon-schnapps": { vendor: "Proof", syncVendor: "Provi", productName: "DeKuyper Sour Watermelon Schnapps Pucker 30 1L", bottleOz: 33.81, searchAliases: ["Watermelon Pucker", "DeKuyper Pucker Watermelon Schnapps"] },
 };
 const OHLQ_MAPPINGS = {
+  "1800-reposado": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "1800 Reposado Tequila 1.75L", bottleOz: 59.1745 },
+  "absolut-raspberri": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Absolut Raspberri Vodka 1L", bottleOz: 33.814 },
+  "absolut-vanilia": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Absolut Vanilia Vodka 1L", bottleOz: 33.814 },
   "absolut-citron": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Absolut Citron Vodka 1.75L", bottleOz: 59.17 },
+  "bacardi-superior": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Bacardi Superior White Rum 1.75L", bottleOz: 59.1745 },
   "bombay-sapphire": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Bombay Sapphire Gin 1.75L", bottleOz: 59.17 },
   "bulleit-bourbon": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Bulleit Bourbon 1.75L", bottleOz: 59.17 },
   "captain-morgan": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Captain Morgan Original Spiced Rum 1.75L", bottleOz: 59.17 },
   "crown-apple": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Crown Royal Regal Apple 1.75L", bottleOz: 59.17 },
+  "crown-royal-peach": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Crown Royal Peach Whisky 1.75L", bottleOz: 59.1745 },
   "crown-royal": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Crown Royal Canadian Whisky 1.75L", bottleOz: 59.17 },
+  "don-julio-blanco": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Don Julio Blanco Tequila 750mL", bottleOz: 25.3605 },
+  "grey-goose": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Grey Goose Vodka 1.75L", bottleOz: 59.1745 },
+  hennessy: { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Hennessy VS Cognac 1.75L", bottleOz: 59.1745 },
   "jack-daniel-s": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Jack Daniel's Old No. 7 1.75L", bottleOz: 59.17 },
   "jack-daniel-s-fire": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Jack Daniel's Tennessee Fire 1.75L", bottleOz: 59.17 },
+  jameson: { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Jameson Irish Whiskey 1.75L", bottleOz: 59.1745 },
   "jim-beam": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Jim Beam Bourbon 1.75L", bottleOz: 59.17 },
+  "jose-cuervo-gold": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Jose Cuervo Especial Gold 1.75L", bottleOz: 59.1745 },
   "jose-cuervo-silver": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Jose Cuervo Especial Silver 1.75L", bottleOz: 59.17 },
   kahlua: { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Kahlua Coffee Liqueur 1L", bottleOz: 33.81 },
   "ketel-one-cucumber-vodka": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Ketel One Botanical Cucumber & Mint 1L", bottleOz: 33.81 },
+  "patron-silver": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Patron Silver Tequila 1.75L", bottleOz: 59.1745 },
+  "pink-whitney": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "New Amsterdam Pink Whitney Vodka 1.75L", bottleOz: 59.1745 },
+  screwball: { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Skrewball Peanut Butter Whiskey 750mL", bottleOz: 25.3605 },
   "svedka-blue-raspberry-vodka": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Svedka Blue Raspberry Vodka 750mL", bottleOz: 25.36 },
   "tito-s": { vendor: "OHLQ", syncVendor: "OHLQ", productName: "Tito's Handmade Vodka 1.75L", bottleOz: 59.17 },
 };
 const INGREDIENT_ABV_PERCENT = {
+  "1800-reposado": 40,
   "absolut-citron": 40,
+  "absolut-raspberri": 40,
+  "absolut-vanilia": 40,
   "apple-pucker": 15,
   "apple-schnapps": 15,
+  "bacardi-superior": 40,
   bitters: 44.7,
   "blueberry-schnapps": 15,
   "bombay-sapphire": 47,
@@ -184,16 +266,25 @@ const INGREDIENT_ABV_PERCENT = {
   "captain-morgan": 35,
   "creme-de-cacao": 15,
   "crown-apple": 35,
+  "crown-royal-peach": 35,
   "crown-royal": 40,
+  "don-julio-blanco": 40,
+  "grey-goose": 40,
+  hennessy: 40,
   "jack-daniel-s": 40,
   "jack-daniel-s-fire": 35,
+  jameson: 40,
   "jim-beam": 40,
+  "jose-cuervo-gold": 40,
   "jose-cuervo-silver": 40,
   kahlua: 20,
   "ketel-one-cucumber-vodka": 30,
+  "patron-silver": 40,
   "peach-schnapps": 15,
+  "pink-whitney": 30,
   "pomegranate-schnapps": 15,
   "raspberry-schnapps": 16.5,
+  screwball: 35,
   "strawberry-schnapps": 15,
   "svedka-blue-raspberry-vodka": 35,
   "tito-s": 40,
@@ -232,6 +323,21 @@ const NEW_RECIPE_ORDER = [
   ["WHISKEY SMASH", "Whiskey Smash"],
   ["APPLE JACK (WHISKEY)", "Apple Jack (Whiskey)"],
   ["ON PAR TEE", "On Par Tee"],
+];
+const STRAIGHT_LIQUOR_TAP_INGREDIENTS = [
+  "1800 Reposado",
+  "Absolut Raspberri",
+  "Absolut Vanilia",
+  "Bacardi Superior",
+  "Crown Royal Peach",
+  "Don Julio Blanco",
+  "Grey Goose",
+  "Hennessy",
+  "Jameson",
+  "Jose Cuervo Gold",
+  "Patron Silver",
+  "Pink Whitney",
+  "Screwball",
 ];
 const recipeGrid = document.querySelector("#recipe-grid");
 const oldRecipeGrid = document.querySelector("#old-recipe-grid");
@@ -2462,6 +2568,19 @@ function buildIngredientCatalog(sourceRecipes) {
     });
   });
 
+  STRAIGHT_LIQUOR_TAP_INGREDIENTS.forEach((name) => {
+    const id = slugify(name);
+    if (byId.has(id)) return;
+    byId.set(id, {
+      id,
+      name,
+      vendorProduct: getVendorMapping(id),
+      totalCost: 0,
+      totalOz: 0,
+      recipes: ["Straight liquor tap"],
+    });
+  });
+
   return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -3420,6 +3539,19 @@ function normalizeIngredientAlias(name) {
   const normalized = clean(name).toLowerCase();
 
   if (/^tito'?s(\s+vodka)?$/.test(normalized)) return "Tito's";
+  if (/^hennessy(\s+cognac)?$/.test(normalized)) return "Hennessy";
+  if (/^bacardi superior( traveler)?(\s+rum)?$/.test(normalized)) return "Bacardi Superior";
+  if (/^1800 reposado(\s+tequila)?$/.test(normalized)) return "1800 Reposado";
+  if (/^don julio blanco(\s+tequila)?$/.test(normalized)) return "Don Julio Blanco";
+  if (/^pink whitney(\s+vodka)?$/.test(normalized)) return "Pink Whitney";
+  if (/^jameson( irish)?(\s+whiskey)?$/.test(normalized)) return "Jameson";
+  if (/^skr?ewball( peanut butter)?(\s+whiskey)?$/.test(normalized)) return "Screwball";
+  if (/^absolut raspberri(\s+vodka)?$/.test(normalized)) return "Absolut Raspberri";
+  if (/^absolut vanilia(\s+vodka)?$/.test(normalized)) return "Absolut Vanilia";
+  if (/^grey goose(\s+vodka)?$/.test(normalized)) return "Grey Goose";
+  if (/^patron( silver)?(\s+tequila)?$/.test(normalized)) return "Patron Silver";
+  if (/^crown royal peach(\s+whiskey)?$/.test(normalized)) return "Crown Royal Peach";
+  if (/^jose cuervo gold(\s+tequila)?$/.test(normalized)) return "Jose Cuervo Gold";
   if (/^ket(t)?le one cucumber vodka$/.test(normalized)) return "Ketel One Cucumber Vodka";
   if (/^ket(t)?le one cucumber$/.test(normalized)) return "Ketel One Cucumber Vodka";
   if (/^jose cuervo(\s+silver)?$/.test(normalized)) return "Jose Cuervo Silver";
