@@ -623,6 +623,7 @@ function getLiveTapLocationLabel(livePrice, kegItem) {
 function renderIngredientTapPricingRow(livePrice, ingredient) {
   const costPerOz = getCatalogUnitCost(ingredient);
   const chargePerOz = livePrice?.chargePerOz || 0;
+  const portions = getLiveTapPortions(livePrice);
   const profitPerOz = chargePerOz && costPerOz ? chargePerOz - costPerOz : 0;
   const margin = chargePerOz ? (profitPerOz / chargePerOz) * 100 : 0;
   const row = document.createElement("tr");
@@ -633,9 +634,9 @@ function renderIngredientTapPricingRow(livePrice, ingredient) {
       <span class="table-note">PMB live: ${escapeHtml(ingredient.name)} cost</span>
     </td>
     <td>${costPerOz ? money(costPerOz) : "-"}</td>
-    <td>${chargePerOz ? money(chargePerOz) : "-"}</td>
-    <td>${chargePerOz && costPerOz ? money(profitPerOz) : "-"}</td>
-    <td>${chargePerOz && costPerOz ? `${formatNumber(margin)}%` : "-"}</td>
+    <td>${portions.length ? renderPortionList(portions) : chargePerOz ? money(chargePerOz) : "-"}</td>
+    <td>${portions.length && costPerOz ? renderPortionProfitList(portions, costPerOz) : chargePerOz && costPerOz ? money(profitPerOz) : "-"}</td>
+    <td>${portions.length && costPerOz ? renderPortionMarginList(portions, costPerOz) : chargePerOz && costPerOz ? `${formatNumber(margin)}%` : "-"}</td>
     <td>-</td>
     <td>-</td>
   `;
@@ -643,6 +644,7 @@ function renderIngredientTapPricingRow(livePrice, ingredient) {
 }
 
 function renderUnmappedTapPricingRow(livePrice) {
+  const portions = getLiveTapPortions(livePrice);
   const row = document.createElement("tr");
   row.innerHTML = `
     <td>${formatTapCell(livePrice)}</td>
@@ -651,13 +653,45 @@ function renderUnmappedTapPricingRow(livePrice) {
       <span class="table-note">PMB live</span>
     </td>
     <td>-</td>
-    <td>${livePrice.chargePerOz ? money(livePrice.chargePerOz) : "-"}</td>
+    <td>${portions.length ? renderPortionList(portions) : livePrice.chargePerOz ? money(livePrice.chargePerOz) : "-"}</td>
     <td>-</td>
     <td>-</td>
     <td>-</td>
     <td>-</td>
   `;
   return row;
+}
+
+function getLiveTapPortions(livePrice) {
+  return Array.isArray(livePrice?.portions) ? livePrice.portions.filter((portion) => portion?.name && toNumber(portion.price) > 0) : [];
+}
+
+function renderPortionList(portions) {
+  return `<div class="portion-list">${portions.map((portion) => `
+    <span><b>${escapeHtml(portion.name)}</b> ${money(toNumber(portion.price))}</span>
+  `).join("")}</div>`;
+}
+
+function renderPortionProfitList(portions, costPerOz) {
+  return `<div class="portion-list">${portions.map((portion) => {
+    const servingOz = getPortionServingOz(portion);
+    const profit = toNumber(portion.price) - (costPerOz * servingOz);
+    return `<span><b>${escapeHtml(portion.name)}</b> ${money(profit)}</span>`;
+  }).join("")}</div>`;
+}
+
+function renderPortionMarginList(portions, costPerOz) {
+  return `<div class="portion-list">${portions.map((portion) => {
+    const price = toNumber(portion.price);
+    const servingOz = getPortionServingOz(portion);
+    const profit = price - (costPerOz * servingOz);
+    const margin = price ? (profit / price) * 100 : 0;
+    return `<span><b>${escapeHtml(portion.name)}</b> ${formatNumber(margin)}%</span>`;
+  }).join("")}</div>`;
+}
+
+function getPortionServingOz(portion) {
+  return /double/i.test(portion?.name || "") ? 3 : 1.5;
 }
 
 function formatTapCell(livePrice) {

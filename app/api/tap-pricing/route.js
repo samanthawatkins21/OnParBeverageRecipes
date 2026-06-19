@@ -42,7 +42,7 @@ function parseJsonLoose(text) {
     }
 
     try {
-      return JSON.parse(safe.join(""));
+      return JSON.parse(safe.join("").replace(/,\s*([}\]])/g, "$1"));
     } catch {
       return null;
     }
@@ -224,18 +224,54 @@ function getMatchedTap(productName, tapLookup) {
   return null;
 }
 
+function isLiquorTap(tapNumber) {
+  return (tapNumber >= 1 && tapNumber <= 20) || (tapNumber >= 83 && tapNumber <= 92);
+}
+
 function getChargePerOz(product) {
   const cents = Number(product.price_per_unit);
   if (!Number.isFinite(cents) || cents <= 0) return 0;
   return cents / 100;
 }
 
+function getItemPrice(item) {
+  const price = Number(item?.price);
+  const decimalPlaces = Number(item?.price_dp);
+  if (!Number.isFinite(price) || price <= 0) return 0;
+  return price / (10 ** (Number.isFinite(decimalPlaces) ? decimalPlaces : 2));
+}
+
+function buildItemPriceMap(itemlist = []) {
+  const byPlu = new Map();
+  itemlist.forEach((item) => {
+    const plu = Number(item?.product_plu || 0);
+    const portionName = clean(item?.portion_name);
+    const price = getItemPrice(item);
+    if (!plu || !portionName || !price) return;
+    if (!byPlu.has(plu)) byPlu.set(plu, []);
+    byPlu.get(plu).push({
+      name: portionName,
+      price,
+    });
+  });
+
+  byPlu.forEach((items) => {
+    items.sort((a, b) => {
+      const order = { single: 1, double: 2 };
+      return (order[a.name.toLowerCase()] || 99) - (order[b.name.toLowerCase()] || 99) || a.name.localeCompare(b.name);
+    });
+  });
+
+  return byPlu;
+}
+
 export async function GET() {
   try {
     const config = getConfig();
     const token = await getAuthtoken(config);
-    const [products, tapLookup] = await Promise.all([
+    const [products, itemPrices, tapLookup] = await Promise.all([
       postJson(config.baseUrl, "/api/productlist", { id: String(config.clientId) }, token),
+      postJson(config.baseUrl, "/api/itemlist", { id: String(config.clientId) }, token),
       getTapLookup(),
     ]);
 
@@ -243,21 +279,28 @@ export async function GET() {
       throw new Error(`PMB productlist failed (${products.status})`);
     }
 
+    const itemPricesByPlu = buildItemPriceMap(itemPrices.json?.itemlist || []);
+
     const items = products.json.productlist
       .map((product) => {
         const chargePerOz = getChargePerOz(product);
         const name = normalizeProductName(product.name);
         if (!name || !chargePerOz || /coming soon/i.test(name)) return null;
         const matchedTap = getMatchedTap(name, tapLookup);
+        const plu = Number(product.plu || 0) || null;
+        const portions = matchedTap?.tapNumber && isLiquorTap(matchedTap.tapNumber)
+          ? itemPricesByPlu.get(plu) || []
+          : [];
 
         return {
           tapPosition: matchedTap?.tapNumber ?? null,
           wall: matchedTap?.wall || "",
           type: matchedTap?.type || "",
           matchedBrand: matchedTap?.brand || "",
-          plu: Number(product.plu || 0) || null,
+          plu,
           name,
           chargePerOz,
+          portions,
           pricePerUnitCents: Number(product.price_per_unit || 0),
           happyHour1PerOz: Number(product.price_per_unit_happyhour1 || 0) / 100 || null,
           happyHour2PerOz: Number(product.price_per_unit_happyhour2 || 0) / 100 || null,

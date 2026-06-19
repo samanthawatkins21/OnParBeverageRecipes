@@ -96,7 +96,7 @@ export default function DashboardPage() {
                     <th>Tap</th>
                     <th>Product</th>
                     <th>Cost / oz</th>
-                    <th>Charge / oz</th>
+                    <th>Charge</th>
                     <th>Profit / oz</th>
                     <th>Margin</th>
                     <th>Oz for 1.5 alcohol</th>

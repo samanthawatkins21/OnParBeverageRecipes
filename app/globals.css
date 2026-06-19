@@ -1324,6 +1324,18 @@ td {
   color: var(--juniper-dark);
 }
 
+.portion-list {
+  display: grid;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.portion-list span {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 @media (max-width: 1100px) {
   .stats-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
