@@ -253,3 +253,46 @@ npm.cmd run provi:extract
 - Public `https://onparbev.com/api/vendor-sync` verified for:
   - `Provi` scope
   - `OHLQ` scope
+
+## Recent Fixes - 2026-06-19
+
+- Beer keg pricing sync now only accepts standard 15.5 gal / 1984 oz keg packages by default.
+- Summer Ale is not allowed to map to the available 1/6 bbl Provi item because On Par only uses 15.5 gal kegs for that beer.
+- Stella Artois is the special keg-size exception:
+  - expected size is 50 L / about 1690.7 oz
+  - Provi price verified at `$170`
+- Related commits pushed:
+  - `ed62fe5` - require standard half-barrel beer keg pricing
+  - `fa76674` - handle Stella 50L keg pricing exception
+
+## Keg Levels Recovery - 2026-06-19
+
+- Symptom: public `Keg Levels` tab stayed broken / stuck while PMB API was reachable.
+- Root causes found:
+  - `public/dashboard.js` called `isRoughlyEqual()` in browser code, but the helper only existed in the server vendor-sync route.
+  - The always-on service copy at `/Users/onparmarketing/OnParBeverageRecipes-service` was missing its `.next` production build, causing Cloudflare 502s until rebuilt.
+  - Cloudflare was serving `/dashboard.js` with a 4-hour browser cache header, so an already-open browser tab could keep the old broken script.
+- Fixes applied:
+  - Added `isRoughlyEqual()` to `public/dashboard.js`.
+  - Rebuilt the Desktop repo and service copy with `npm run build`.
+  - Restarted `com.onpar.beverage-dashboard`.
+  - Added `Cache-Control: no-store, no-cache, must-revalidate, proxy-revalidate` for `/dashboard.js` in `next.config.mjs`.
+  - Restarted both `com.onpar.beverage-dashboard` and `com.onpar.cloudflared`.
+- Verification after fix:
+  - `https://onparbev.com/dashboard.js` returns `cf-cache-status: BYPASS`.
+  - `https://onparbev.com/api/keg-levels` returns `103` live PMB products.
+  - Browser automation opened `https://onparbev.com`, clicked `Keg Levels`, found `3` wall cards, and showed `Found live levels for 103 products`.
+- Related commits pushed:
+  - `92a5ef6` - restore dashboard keg tab helper
+  - `f296b0f` - bypass Cloudflare cache for dashboard script
+
+## Always-On Service Recovery Commands - Mac
+
+```bash
+cd /Users/onparmarketing/OnParBeverageRecipes-service
+PATH=/Users/onparmarketing/OnParBeverageRecipes-service/.tools/node/bin:$PATH npm run build
+launchctl kickstart -k gui/$(id -u)/com.onpar.beverage-dashboard
+launchctl kickstart -k gui/$(id -u)/com.onpar.cloudflared
+curl -sS https://onparbev.com/api/keg-levels | head -c 500
+curl -I 'https://onparbev.com/dashboard.js?v=check'
+```
