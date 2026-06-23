@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-PROJECT_DIR="/Users/onparmarketing/Desktop/OnParBeverageRecipes-main"
+PROJECT_DIR="/Users/onparmarketing/OnParBeverageRecipes-service"
 export PATH="${PROJECT_DIR}/.tools/node/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 cd "${PROJECT_DIR}"
