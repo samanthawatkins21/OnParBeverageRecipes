@@ -33,13 +33,19 @@ function isApiPath(pathname) {
   return pathname.startsWith("/api/");
 }
 
+function getPublicUrl(request, pathname) {
+  const protocol = request.headers.get("x-forwarded-proto") || "https";
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || request.nextUrl.host;
+  return new URL(pathname, `${protocol}://${host}`);
+}
+
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
   const isAuthed = await hasValidSession(request);
 
   if (isPublicPath(pathname)) {
     if (isAuthed && pathname === "/login") {
-      return NextResponse.redirect(new URL("/", request.url));
+      return NextResponse.redirect(getPublicUrl(request, "/"));
     }
     return NextResponse.next();
   }
@@ -52,7 +58,7 @@ export async function middleware(request) {
     return NextResponse.json({ error: "Login required." }, { status: 401 });
   }
 
-  const loginUrl = new URL("/login", request.url);
+  const loginUrl = getPublicUrl(request, "/login");
   loginUrl.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
   if (!process.env.DASHBOARD_PASSWORD) {
     loginUrl.searchParams.set("setup", "missing-password");
