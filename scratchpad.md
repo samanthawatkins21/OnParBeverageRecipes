@@ -12,6 +12,17 @@
 - Local site: `http://localhost:3000`
 - Main branch deploys to Vercel
 
+## Login / Password Gate
+
+- The dashboard has a site-wide password gate.
+- Login page: `/login`
+- Login API route: `app/api/login/route.js`
+- Middleware: `middleware.js`
+- Required env var:
+  - `DASHBOARD_PASSWORD`
+- The password is not committed; set it in `.env.local` for local dev and in Vercel environment variables for production.
+- Successful login sets an HTTP-only signed cookie for 7 days.
+
 ## Main Tabs
 
 - `Recipes`
